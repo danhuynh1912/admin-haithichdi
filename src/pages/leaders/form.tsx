@@ -1,7 +1,10 @@
+import { useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { useForm } from '@refinedev/react-hook-form';
-import { useNavigation } from '@refinedev/core';
+import { useNavigation, useOne } from '@refinedev/core';
 import { useController } from 'react-hook-form';
 import { ImageUpload } from '@/components/ImageUpload';
+import { createLeader, updateLeaderCredentials, randomPassword } from '@/lib/adminApi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -9,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface LeaderFormData {
+  email: string; password: string;
   full_name: string; display_role: string; bio: string; highlight: string;
   location: string; relationship_status: string; date_of_birth: string;
   years_experience: number; is_active: boolean;
@@ -16,11 +20,12 @@ interface LeaderFormData {
   role: string;
 }
 
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
+function Field({ label, error, hint, children }: { label: string; error?: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
       <Label>{label}</Label>
       {children}
+      {hint && !error && <span className="text-xs text-muted-foreground">{hint}</span>}
       {error && <span className="text-xs text-destructive">{error}</span>}
     </div>
   );
@@ -28,13 +33,33 @@ function Field({ label, error, children }: { label: string; error?: string; chil
 
 const selectCls = "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
+/** Strip form-only fields and normalise empties the DB can't take. */
+function toProfilePayload(v: LeaderFormData) {
+  const { email: _e, password: _p, ...profile } = v;
+  return {
+    ...profile,
+    date_of_birth: profile.date_of_birth || null,
+    years_experience: Number.isFinite(profile.years_experience) ? profile.years_experience : 0,
+    strengths: profile.strengths ?? [],
+  };
+}
+
 export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
   const { list } = useNavigation();
+  const { id } = useParams<{ id: string }>();
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
   const {
     register, handleSubmit, control, watch, setValue,
     refineCore: { onFinish, formLoading },
     formState: { errors },
-  } = useForm<LeaderFormData>({ refineCoreProps: { resource: 'leaders' } });
+  } = useForm<LeaderFormData>({
+    refineCoreProps: mode === 'edit'
+      ? { resource: 'profiles', action: 'edit', id, redirect: false }
+      : { resource: 'profiles', action: 'create' },
+    defaultValues: { role: 'leader', is_active: true, years_experience: 0, strengths: [] },
+  });
 
   const avatarPath = watch('avatar_path');
   const avatarUrl = watch('avatar_url');
@@ -42,16 +67,71 @@ export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
   const { field: strengthsField } = useController({ control, name: 'strengths', defaultValue: [] });
   const strengthsStr = (strengthsField.value ?? []).join('\n');
 
+  async function onSubmit(raw: Record<string, unknown>) {
+    const values = raw as unknown as LeaderFormData;
+    setSubmitError(null);
+    if (mode === 'edit') {
+      await onFinish(toProfilePayload(values));
+      list('profiles');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await createLeader(values.email, values.password, toProfilePayload(values));
+      list('profiles');
+    } catch (e) {
+      setSubmitError((e as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const busy = formLoading || submitting;
+
   return (
     <div className="p-6 max-w-2xl">
       <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="sm" onClick={() => list('leaders')}>← Quay lại</Button>
+        <Button variant="ghost" size="sm" onClick={() => list('profiles')}>← Quay lại</Button>
         <h2 className="text-xl font-bold">{mode === 'create' ? 'Thêm Leader' : 'Sửa Leader'}</h2>
       </div>
 
+      {submitError && (
+        <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {submitError}
+        </div>
+      )}
+
       <Card>
         <CardContent className="pt-6">
-          <form onSubmit={handleSubmit(onFinish)} className="flex flex-col gap-5">
+          <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
+
+            {mode === 'create' && (
+              <div className="rounded-lg border bg-muted/30 p-4 flex flex-col gap-4">
+                <p className="text-sm font-semibold">Tài khoản đăng nhập</p>
+                <Field label="Email *" error={errors.email?.message as string}>
+                  <Input
+                    type="email"
+                    {...register('email', { required: 'Bắt buộc' })}
+                    placeholder="leader@haithichdi.vn"
+                  />
+                </Field>
+                <Field
+                  label="Mật khẩu *"
+                  error={errors.password?.message as string}
+                  hint="Tối thiểu 8 ký tự. Gửi lại cho leader sau khi tạo — mật khẩu không xem lại được."
+                >
+                  <div className="flex gap-2">
+                    <Input
+                      type="text"
+                      {...register('password', { required: 'Bắt buộc', minLength: { value: 8, message: 'Tối thiểu 8 ký tự' } })}
+                    />
+                    <Button type="button" variant="outline" onClick={() => setValue('password', randomPassword())}>
+                      Tạo ngẫu nhiên
+                    </Button>
+                  </div>
+                </Field>
+              </div>
+            )}
 
             <ImageUpload prefix="profiles/avatars" currentPath={avatarPath} currentUrl={avatarUrl} onUploaded={key => setValue('avatar_path', key)} label="Avatar" />
             <Field label="Hoặc URL avatar ngoài">
@@ -109,18 +189,82 @@ export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
 
             <Field label="Active">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" {...register('is_active')} defaultChecked className="w-4 h-4 accent-[#d00600]" />
+                <input type="checkbox" {...register('is_active')} className="w-4 h-4 accent-[#d00600]" />
                 <span className="text-sm">Hiện trên trang About</span>
               </label>
             </Field>
 
             <div className="flex gap-3 mt-2">
-              <Button type="submit" disabled={formLoading}>{formLoading ? 'Đang lưu…' : 'Lưu'}</Button>
-              <Button type="button" variant="outline" onClick={() => list('leaders')}>Hủy</Button>
+              <Button type="submit" disabled={busy}>{busy ? 'Đang lưu…' : 'Lưu'}</Button>
+              <Button type="button" variant="outline" onClick={() => list('profiles')}>Hủy</Button>
             </div>
           </form>
         </CardContent>
       </Card>
+
+      {mode === 'edit' && id && <CredentialsCard id={id} />}
     </div>
+  );
+}
+
+/** Separate card: changing email/password goes through the edge function, not the table. */
+function CredentialsCard({ id }: { id: string }) {
+  const { result } = useOne<{ id: string; email: string }>({
+    resource: 'leaders_admin', id, meta: { select: 'id,email' },
+  });
+  const currentEmail = result?.email ?? '';
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [state, setState] = useState<{ busy: boolean; error?: string; ok?: string }>({ busy: false });
+
+  async function save() {
+    const patch: { email?: string; password?: string } = {};
+    if (email.trim() && email.trim() !== currentEmail) patch.email = email.trim();
+    if (password) patch.password = password;
+    if (!patch.email && !patch.password) {
+      setState({ busy: false, error: 'Chưa thay đổi gì' });
+      return;
+    }
+    setState({ busy: true });
+    try {
+      await updateLeaderCredentials(id, patch);
+      setPassword('');
+      setState({ busy: false, ok: 'Đã cập nhật tài khoản đăng nhập' });
+    } catch (e) {
+      setState({ busy: false, error: (e as Error).message });
+    }
+  }
+
+  return (
+    <Card className="mt-6">
+      <CardContent className="pt-6 flex flex-col gap-4">
+        <div>
+          <p className="text-sm font-semibold">Tài khoản đăng nhập</p>
+          <p className="text-xs text-muted-foreground mt-1">Email hiện tại: {currentEmail || '…'}</p>
+        </div>
+
+        {state.error && <span className="text-xs text-destructive">{state.error}</span>}
+        {state.ok && <span className="text-xs text-emerald-600">{state.ok}</span>}
+
+        <Field label="Email mới">
+          <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder={currentEmail} />
+        </Field>
+        <Field label="Mật khẩu mới" hint="Để trống nếu không đổi. Tối thiểu 8 ký tự.">
+          <div className="flex gap-2">
+            <Input type="text" value={password} onChange={e => setPassword(e.target.value)} />
+            <Button type="button" variant="outline" onClick={() => setPassword(randomPassword())}>
+              Tạo ngẫu nhiên
+            </Button>
+          </div>
+        </Field>
+
+        <div>
+          <Button type="button" onClick={save} disabled={state.busy}>
+            {state.busy ? 'Đang lưu…' : 'Cập nhật tài khoản'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

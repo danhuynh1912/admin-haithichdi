@@ -26,7 +26,9 @@ export default function App() {
           { name: 'locations', list: '/locations', create: '/locations/create', edit: '/locations/edit/:id' },
           { name: 'tours', list: '/tours', create: '/tours/create', edit: '/tours/edit/:id' },
           { name: 'bookings', list: '/bookings' },
-          { name: 'leaders', list: '/leaders', edit: '/leaders/edit/:id', meta: { label: 'Leaders' } },
+          // table is `profiles`; the list reads the `leaders_admin` view (adds email)
+          { name: 'profiles', list: '/leaders', create: '/leaders/create', edit: '/leaders/edit/:id', meta: { label: 'Leaders' } },
+          { name: 'leaders_admin', list: '/leaders' },
         ]}
         options={{ syncWithLocation: true, warnWhenUnsavedChanges: true }}
       >
@@ -43,6 +45,7 @@ export default function App() {
             <Route path="/tours/edit/:id" element={<TourForm mode="edit" />} />
             <Route path="/bookings" element={<BookingList />} />
             <Route path="/leaders" element={<LeaderList />} />
+            <Route path="/leaders/create" element={<LeaderForm mode="create" />} />
             <Route path="/leaders/edit/:id" element={<LeaderForm mode="edit" />} />
           </Route>
         </Routes>

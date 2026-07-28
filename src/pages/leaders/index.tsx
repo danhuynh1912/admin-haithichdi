@@ -1,12 +1,15 @@
+import { useState } from 'react';
 import { useTable } from '@refinedev/react-table';
-import { useNavigation } from '@refinedev/core';
+import { useNavigation, useInvalidate } from '@refinedev/core';
 import { createColumnHelper, flexRender, getCoreRowModel } from '@tanstack/react-table';
 import { resolveMediaUrl } from '@/lib/supabase';
+import { deleteLeader } from '@/lib/adminApi';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
-interface Profile {
+interface Leader {
   id: string;
+  email: string;
   full_name: string;
   role: string;
   display_role: string;
@@ -14,12 +17,32 @@ interface Profile {
   avatar_path: string | null;
   avatar_url: string;
   years_experience: number;
+  last_sign_in_at: string | null;
 }
 
-const col = createColumnHelper<Profile>();
+const col = createColumnHelper<Leader>();
+
+const SELECT = 'id,email,full_name,role,display_role,is_active,avatar_path,avatar_url,years_experience,last_sign_in_at';
 
 export function LeaderList() {
-  const { edit } = useNavigation();
+  const { edit, create } = useNavigation();
+  const invalidate = useInvalidate();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onDelete(row: Leader) {
+    if (!confirm(`Xoá tài khoản "${row.full_name}" (${row.email})?\nHành động này không thể hoàn tác.`)) return;
+    setBusyId(row.id);
+    setError(null);
+    try {
+      await deleteLeader(row.id);
+      await invalidate({ resource: 'leaders_admin', invalidates: ['list'] });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   const columns = [
     col.display({
@@ -29,28 +52,41 @@ export function LeaderList() {
         const url = resolveMediaUrl(r.avatar_path, r.avatar_url);
         return url
           ? <img src={url} alt="" className="w-9 h-9 object-cover rounded-full" />
-          : <div className="w-9 h-9 rounded-full bg-[#d00600] flex items-center justify-center text-white font-bold text-sm">{r.full_name[0]}</div>;
+          : <div className="w-9 h-9 rounded-full bg-[#d00600] flex items-center justify-center text-white font-bold text-sm">{(r.full_name || r.email)[0]?.toUpperCase()}</div>;
       },
     }),
     col.accessor('full_name', { header: 'Họ tên' }),
+    col.accessor('email', { header: 'Email đăng nhập' }),
     col.accessor('role', { header: 'Role', size: 80 }),
     col.accessor('display_role', { header: 'Chức danh' }),
-    col.accessor('years_experience', { header: 'Kinh nghiệm', size: 110, cell: i => `${i.getValue()} năm` }),
+    col.accessor('years_experience', { header: 'Kinh nghiệm', size: 110, cell: i => `${i.getValue() ?? 0} năm` }),
+    col.accessor('last_sign_in_at', {
+      header: 'Đăng nhập gần nhất', size: 150,
+      cell: i => i.getValue() ? new Date(i.getValue() as string).toLocaleDateString('vi-VN') : '—',
+    }),
     col.accessor('is_active', {
       header: 'Active', size: 80,
       cell: i => <Badge variant={i.getValue() ? 'success' : 'secondary'}>{i.getValue() ? 'ON' : 'OFF'}</Badge>,
     }),
     col.display({
       id: 'actions', header: '',
-      cell: info => (
-        <Button variant="outline" size="sm" onClick={() => edit('leaders', info.row.original.id)}>Sửa</Button>
-      ),
+      cell: info => {
+        const r = info.row.original;
+        return (
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" size="sm" onClick={() => edit('profiles', r.id)}>Sửa</Button>
+            <Button variant="outline" size="sm" disabled={busyId === r.id} onClick={() => onDelete(r)}>
+              {busyId === r.id ? '…' : 'Xoá'}
+            </Button>
+          </div>
+        );
+      },
     }),
   ];
 
-  const table = useTable({
+  const table = useTable<Leader>({
     columns,
-    refineCoreProps: { resource: 'leaders', meta: { select: 'id,full_name,role,display_role,is_active,avatar_path,avatar_url,years_experience' } },
+    refineCoreProps: { resource: 'leaders_admin', meta: { select: SELECT } },
     getCoreRowModel: getCoreRowModel(),
   });
 
@@ -58,8 +94,15 @@ export function LeaderList() {
     <div className="p-6">
       <div className="flex justify-between items-center mb-5">
         <h2 className="text-xl font-bold">👤 Leaders</h2>
-        <p className="text-sm text-muted-foreground">Leaders được tạo qua Supabase Auth → Profiles</p>
+        <Button onClick={() => create('profiles')}>+ Thêm Leader</Button>
       </div>
+
+      {error && (
+        <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-lg border bg-card">
         <table className="w-full text-sm border-collapse">
           <thead>
@@ -83,6 +126,13 @@ export function LeaderList() {
                 ))}
               </tr>
             ))}
+            {table.reactTable.getRowModel().rows.length === 0 && (
+              <tr>
+                <td colSpan={columns.length} className="px-4 py-10 text-center text-muted-foreground">
+                  Chưa có leader nào. Bấm “+ Thêm Leader” để tạo tài khoản đầu tiên.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
