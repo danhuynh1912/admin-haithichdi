@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { useLogin } from '@refinedev/core';
 
 export function Login() {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const { mutate: login, isPending: isLoading } = useLogin<{ email: string; password: string }>();
+  const { mutate: login, isPending: isLoading } = useLogin<{ username: string; password: string }>();
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    login({ email, password });
+    login({ username, password });
   }
 
   return (
@@ -21,11 +21,14 @@ export function Login() {
         <p style={{ color: '#666', margin: 0, fontSize: 14 }}>Admin Panel</p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ color: '#aaa', fontSize: 13 }}>Email</label>
+          <label style={{ color: '#aaa', fontSize: 13 }}>Tên đăng nhập</label>
           <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
+            type="text"
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
+            value={username}
+            onChange={e => setUsername(e.target.value)}
             required
             style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #333', background: '#222', color: '#fff', fontSize: 14 }}
           />

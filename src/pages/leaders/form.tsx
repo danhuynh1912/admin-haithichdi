@@ -5,6 +5,7 @@ import { useNavigation, useOne } from '@refinedev/core';
 import { useController } from 'react-hook-form';
 import { ImageUpload } from '@/components/ImageUpload';
 import { createLeader, updateLeaderCredentials, randomPassword } from '@/lib/adminApi';
+import { emailToUsername, USERNAME_PATTERN } from '@/lib/username';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface LeaderFormData {
-  email: string; password: string;
+  username: string; password: string;
   full_name: string; display_role: string; bio: string; highlight: string;
   location: string; relationship_status: string; date_of_birth: string;
   years_experience: number; is_active: boolean;
@@ -35,7 +36,7 @@ const selectCls = "flex h-10 w-full rounded-md border border-input bg-background
 
 /** Strip form-only fields and normalise empties the DB can't take. */
 function toProfilePayload(v: LeaderFormData) {
-  const { email: _e, password: _p, ...profile } = v;
+  const { username: _u, password: _p, ...profile } = v;
   return {
     ...profile,
     date_of_birth: profile.date_of_birth || null,
@@ -77,7 +78,7 @@ export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
     }
     setSubmitting(true);
     try {
-      await createLeader(values.email, values.password, toProfilePayload(values));
+      await createLeader(values.username, values.password, toProfilePayload(values));
       list('profiles');
     } catch (e) {
       setSubmitError((e as Error).message);
@@ -108,11 +109,21 @@ export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
             {mode === 'create' && (
               <div className="rounded-lg border bg-muted/30 p-4 flex flex-col gap-4">
                 <p className="text-sm font-semibold">Tài khoản đăng nhập</p>
-                <Field label="Email *" error={errors.email?.message as string}>
+                <Field
+                  label="Tên đăng nhập *"
+                  error={errors.username?.message as string}
+                  hint="3–30 ký tự, chỉ gồm chữ thường, số, dấu chấm, gạch ngang, gạch dưới. Không đổi được về sau trừ khi admin sửa."
+                >
                   <Input
-                    type="email"
-                    {...register('email', { required: 'Bắt buộc' })}
-                    placeholder="leader@haithichdi.vn"
+                    type="text"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    placeholder="hoangtuan"
+                    {...register('username', {
+                      required: 'Bắt buộc',
+                      setValueAs: (v: string) => (v ?? '').trim().toLowerCase(),
+                      pattern: { value: USERNAME_PATTERN, message: 'Chỉ a-z, 0-9, . - _ ; bắt đầu bằng chữ hoặc số; 3–30 ký tự' },
+                    })}
                   />
                 </Field>
                 <Field
@@ -212,17 +223,24 @@ function CredentialsCard({ id }: { id: string }) {
   const { result } = useOne<{ id: string; email: string }>({
     resource: 'leaders_admin', id, meta: { select: 'id,email' },
   });
-  const currentEmail = result?.email ?? '';
+  const currentUsername = emailToUsername(result?.email);
 
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [state, setState] = useState<{ busy: boolean; error?: string; ok?: string }>({ busy: false });
 
   async function save() {
-    const patch: { email?: string; password?: string } = {};
-    if (email.trim() && email.trim() !== currentEmail) patch.email = email.trim();
+    const patch: { username?: string; password?: string } = {};
+    const next = username.trim().toLowerCase();
+    if (next && next !== currentUsername) {
+      if (!USERNAME_PATTERN.test(next)) {
+        setState({ busy: false, error: 'Tên đăng nhập chỉ gồm a-z, 0-9, . - _ ; 3–30 ký tự' });
+        return;
+      }
+      patch.username = next;
+    }
     if (password) patch.password = password;
-    if (!patch.email && !patch.password) {
+    if (!patch.username && !patch.password) {
       setState({ busy: false, error: 'Chưa thay đổi gì' });
       return;
     }
@@ -241,14 +259,21 @@ function CredentialsCard({ id }: { id: string }) {
       <CardContent className="pt-6 flex flex-col gap-4">
         <div>
           <p className="text-sm font-semibold">Tài khoản đăng nhập</p>
-          <p className="text-xs text-muted-foreground mt-1">Email hiện tại: {currentEmail || '…'}</p>
+          <p className="text-xs text-muted-foreground mt-1">Tên đăng nhập hiện tại: {currentUsername || '…'}</p>
         </div>
 
         {state.error && <span className="text-xs text-destructive">{state.error}</span>}
         {state.ok && <span className="text-xs text-emerald-600">{state.ok}</span>}
 
-        <Field label="Email mới">
-          <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder={currentEmail} />
+        <Field label="Tên đăng nhập mới" hint="Để trống nếu không đổi.">
+          <Input
+            type="text"
+            autoCapitalize="none"
+            spellCheck={false}
+            value={username}
+            onChange={e => setUsername(e.target.value)}
+            placeholder={currentUsername}
+          />
         </Field>
         <Field label="Mật khẩu mới" hint="Để trống nếu không đổi. Tối thiểu 8 ký tự.">
           <div className="flex gap-2">

@@ -3,6 +3,7 @@ import { useTable } from '@refinedev/react-table';
 import { useNavigation, useInvalidate } from '@refinedev/core';
 import { createColumnHelper, flexRender, getCoreRowModel } from '@tanstack/react-table';
 import { resolveMediaUrl } from '@/lib/supabase';
+import { emailToUsername } from '@/lib/username';
 import { deleteLeader } from '@/lib/adminApi';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -31,7 +32,7 @@ export function LeaderList() {
   const [error, setError] = useState<string | null>(null);
 
   async function onDelete(row: Leader) {
-    if (!confirm(`Xoá tài khoản "${row.full_name}" (${row.email})?\nHành động này không thể hoàn tác.`)) return;
+    if (!confirm(`Xoá tài khoản "${row.full_name}" (${emailToUsername(row.email)})?\nHành động này không thể hoàn tác.`)) return;
     setBusyId(row.id);
     setError(null);
     try {
@@ -52,11 +53,11 @@ export function LeaderList() {
         const url = resolveMediaUrl(r.avatar_path, r.avatar_url);
         return url
           ? <img src={url} alt="" className="w-9 h-9 object-cover rounded-full" />
-          : <div className="w-9 h-9 rounded-full bg-[#d00600] flex items-center justify-center text-white font-bold text-sm">{(r.full_name || r.email)[0]?.toUpperCase()}</div>;
+          : <div className="w-9 h-9 rounded-full bg-[#d00600] flex items-center justify-center text-white font-bold text-sm">{(r.full_name || emailToUsername(r.email))[0]?.toUpperCase()}</div>;
       },
     }),
     col.accessor('full_name', { header: 'Họ tên' }),
-    col.accessor('email', { header: 'Email đăng nhập' }),
+    col.accessor('email', { header: 'Tên đăng nhập', cell: i => emailToUsername(i.getValue()) }),
     col.accessor('role', { header: 'Role', size: 80 }),
     col.accessor('display_role', { header: 'Chức danh' }),
     col.accessor('years_experience', { header: 'Kinh nghiệm', size: 110, cell: i => `${i.getValue() ?? 0} năm` }),

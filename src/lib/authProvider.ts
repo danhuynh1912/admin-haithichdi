@@ -1,9 +1,14 @@
 import type { AuthProvider } from '@refinedev/core';
 import { supabase } from './supabase';
+import { usernameToEmail } from './username';
 
 export const authProvider: AuthProvider = {
-  login: async ({ email, password }: { email: string; password: string }) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+  // `username` is either a username or, for pre-username accounts, a real email.
+  login: async ({ username, password }: { username: string; password: string }) => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email: usernameToEmail(username),
+      password,
+    });
     if (error) return { success: false, error };
     return { success: true, redirectTo: '/' };
   },

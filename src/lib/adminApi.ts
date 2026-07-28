@@ -37,11 +37,11 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
   return json as T;
 }
 
-export function createLeader(email: string, password: string, profile: LeaderProfileInput) {
-  return call<{ id: string }>({ action: 'create', email, password, profile });
+export function createLeader(username: string, password: string, profile: LeaderProfileInput) {
+  return call<{ id: string }>({ action: 'create', username, password, profile });
 }
 
-export function updateLeaderCredentials(id: string, patch: { email?: string; password?: string }) {
+export function updateLeaderCredentials(id: string, patch: { username?: string; password?: string }) {
   return call<{ id: string }>({ action: 'update_credentials', id, ...patch });
 }
 
