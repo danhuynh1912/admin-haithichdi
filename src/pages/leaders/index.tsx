@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useTable } from '@refinedev/react-table';
 import { useNavigation, useInvalidate } from '@refinedev/core';
-import { createColumnHelper, flexRender, getCoreRowModel } from '@tanstack/react-table';
+import { createColumnHelper, getCoreRowModel } from '@tanstack/react-table';
+import { DataTable } from '@/components/DataTable';
 import { resolveMediaUrl } from '@/lib/supabase';
 import { emailToUsername } from '@/lib/username';
 import { deleteLeader } from '@/lib/adminApi';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 
 interface Leader {
   id: string;
@@ -77,7 +79,7 @@ export function LeaderList() {
           <div className="flex gap-2 justify-end">
             <Button variant="outline" size="sm" onClick={() => edit('profiles', r.id)}>Sửa</Button>
             <Button variant="outline" size="sm" disabled={busyId === r.id} onClick={() => onDelete(r)}>
-              {busyId === r.id ? '…' : 'Xoá'}
+              {busyId === r.id ? <Spinner /> : 'Xoá'}
             </Button>
           </div>
         );
@@ -104,39 +106,7 @@ export function LeaderList() {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border bg-card">
-        <table className="w-full text-sm border-collapse">
-          <thead>
-            {table.reactTable.getHeaderGroups().map(hg => (
-              <tr key={hg.id} className="bg-muted/50">
-                {hg.headers.map(h => (
-                  <th key={h.id} className="px-4 py-3 text-left font-semibold text-muted-foreground">
-                    {flexRender(h.column.columnDef.header, h.getContext())}
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {table.reactTable.getRowModel().rows.map(row => (
-              <tr key={row.id} className="border-t border-border hover:bg-muted/30 transition-colors">
-                {row.getVisibleCells().map(cell => (
-                  <td key={cell.id} className="px-4 py-3">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
-              </tr>
-            ))}
-            {table.reactTable.getRowModel().rows.length === 0 && (
-              <tr>
-                <td colSpan={columns.length} className="px-4 py-10 text-center text-muted-foreground">
-                  Chưa có leader nào. Bấm “+ Thêm Leader” để tạo tài khoản đầu tiên.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable table={table} emptyText="Chưa có leader nào. Bấm “+ Thêm Leader” để tạo tài khoản đầu tiên." />
     </div>
   );
 }

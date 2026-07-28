@@ -5,6 +5,7 @@ import { useFieldArray } from 'react-hook-form';
 import { ImageUpload } from '@/components/ImageUpload';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -87,7 +88,9 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
         <h2 className="text-xl font-bold">{mode === 'create' ? 'Thêm Tour' : 'Sửa Tour'}</h2>
       </div>
 
-      {loadingRelated ? <p className="text-muted-foreground">Đang tải…</p> : (
+      {loadingRelated ? (
+        <div className="flex items-center gap-2 text-muted-foreground py-12 justify-center"><Spinner /> Đang tải…</div>
+      ) : (
         <Card>
           <CardContent className="pt-6">
             <form onSubmit={handleSubmit(handleSubmitWithRelated as never)} className="flex flex-col gap-5">
@@ -173,7 +176,7 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
               ))}
 
               <div className="flex gap-3 mt-2">
-                <Button type="submit" disabled={formLoading}>{formLoading ? 'Đang lưu…' : 'Lưu'}</Button>
+                <Button type="submit" disabled={formLoading}>{formLoading ? <><Spinner /> Đang lưu…</> : 'Lưu'}</Button>
                 <Button type="button" variant="outline" onClick={() => list('tours')}>Hủy</Button>
               </div>
             </form>

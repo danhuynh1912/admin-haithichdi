@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { uploadMedia, type MediaPrefix } from '@/lib/upload';
 import { resolveMediaUrl } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { Label } from '@/components/ui/label';
 
 interface Props {
@@ -43,7 +44,7 @@ export function ImageUpload({ prefix, currentPath, currentUrl, onUploaded, accep
         <img src={previewUrl} alt="preview" className="w-28 h-20 object-cover rounded-md border border-border" />
       )}
       <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={uploading} className="w-fit">
-        {uploading ? 'Đang upload…' : 'Chọn file'}
+        {uploading ? <><Spinner /> Đang upload…</> : 'Chọn file'}
       </Button>
       <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={handleChange} />
       {error && <span className="text-xs text-destructive">{error}</span>}

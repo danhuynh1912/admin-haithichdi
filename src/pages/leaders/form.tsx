@@ -7,6 +7,7 @@ import { ImageUpload } from '@/components/ImageUpload';
 import { createLeader, updateLeaderCredentials, randomPassword } from '@/lib/adminApi';
 import { emailToUsername, USERNAME_PATTERN } from '@/lib/username';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -102,6 +103,9 @@ export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
         </div>
       )}
 
+      {mode === 'edit' && formLoading ? (
+        <div className="flex items-center gap-2 text-muted-foreground py-12 justify-center"><Spinner /> Đang tải…</div>
+      ) : (
       <Card>
         <CardContent className="pt-6">
           <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
@@ -206,12 +210,13 @@ export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
             </Field>
 
             <div className="flex gap-3 mt-2">
-              <Button type="submit" disabled={busy}>{busy ? 'Đang lưu…' : 'Lưu'}</Button>
+              <Button type="submit" disabled={busy}>{busy ? <><Spinner /> Đang lưu…</> : 'Lưu'}</Button>
               <Button type="button" variant="outline" onClick={() => list('profiles')}>Hủy</Button>
             </div>
           </form>
         </CardContent>
       </Card>
+      )}
 
       {mode === 'edit' && id && <CredentialsCard id={id} />}
     </div>
@@ -286,7 +291,7 @@ function CredentialsCard({ id }: { id: string }) {
 
         <div>
           <Button type="button" onClick={save} disabled={state.busy}>
-            {state.busy ? 'Đang lưu…' : 'Cập nhật tài khoản'}
+            {state.busy ? <><Spinner /> Đang lưu…</> : 'Cập nhật tài khoản'}
           </Button>
         </div>
       </CardContent>

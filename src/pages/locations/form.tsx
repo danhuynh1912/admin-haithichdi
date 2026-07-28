@@ -2,6 +2,7 @@ import { useForm } from '@refinedev/react-hook-form';
 import { useNavigation } from '@refinedev/core';
 import { ImageUpload } from '@/components/ImageUpload';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -52,6 +53,9 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
         <h2 className="text-xl font-bold">{mode === 'create' ? 'Thêm Location' : 'Sửa Location'}</h2>
       </div>
 
+      {mode === 'edit' && formLoading ? (
+        <div className="flex items-center gap-2 text-muted-foreground py-12 justify-center"><Spinner /> Đang tải…</div>
+      ) : (
       <Card>
         <CardContent className="pt-6">
           <form onSubmit={handleSubmit(onFinish)} className="flex flex-col gap-5">
@@ -118,12 +122,13 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
             </Field>
 
             <div className="flex gap-3 mt-2">
-              <Button type="submit" disabled={formLoading}>{formLoading ? 'Đang lưu…' : 'Lưu'}</Button>
+              <Button type="submit" disabled={formLoading}>{formLoading ? <><Spinner /> Đang lưu…</> : 'Lưu'}</Button>
               <Button type="button" variant="outline" onClick={() => list('locations')}>Hủy</Button>
             </div>
           </form>
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

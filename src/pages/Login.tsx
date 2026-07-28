@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLogin } from '@refinedev/core';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
@@ -52,7 +53,7 @@ export function Login() {
             </div>
 
             <Button type="submit" size="lg" disabled={isLoading} className="mt-2">
-              {isLoading ? 'Đang đăng nhập…' : 'Đăng nhập'}
+              {isLoading ? <><Spinner /> Đang đăng nhập…</> : 'Đăng nhập'}
             </Button>
           </form>
         </CardContent>

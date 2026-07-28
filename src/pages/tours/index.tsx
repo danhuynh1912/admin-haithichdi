@@ -1,6 +1,7 @@
 import { useTable } from '@refinedev/react-table';
 import { useDelete, useNavigation } from '@refinedev/core';
-import { createColumnHelper, flexRender, getCoreRowModel } from '@tanstack/react-table';
+import { createColumnHelper, getCoreRowModel } from '@tanstack/react-table';
+import { DataTable } from '@/components/DataTable';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
@@ -57,32 +58,7 @@ export function TourList() {
         <h2 className="text-xl font-bold">🏔️ Tours</h2>
         <Button onClick={() => create('tours')}>+ Thêm Tour</Button>
       </div>
-      <div className="overflow-x-auto rounded-lg border bg-card">
-        <table className="w-full text-sm border-collapse">
-          <thead>
-            {table.reactTable.getHeaderGroups().map(hg => (
-              <tr key={hg.id} className="bg-muted/50">
-                {hg.headers.map(h => (
-                  <th key={h.id} className="px-4 py-3 text-left font-semibold text-muted-foreground">
-                    {flexRender(h.column.columnDef.header, h.getContext())}
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {table.reactTable.getRowModel().rows.map(row => (
-              <tr key={row.id} className="border-t border-border hover:bg-muted/30 transition-colors">
-                {row.getVisibleCells().map(cell => (
-                  <td key={cell.id} className="px-4 py-3">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable table={table} emptyText="Chưa có tour nào." />
       <div className="flex gap-2 mt-4 items-center">
         <Button variant="outline" size="sm" onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage <= 1}>←</Button>
         <span className="text-sm text-muted-foreground">Trang {currentPage} / {pageCount}</span>
