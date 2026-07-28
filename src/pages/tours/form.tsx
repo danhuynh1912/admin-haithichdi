@@ -119,7 +119,7 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
                 </Field>
                 <Field label="Active">
                   <label className="flex items-center gap-2 pt-2 cursor-pointer">
-                    <input type="checkbox" {...register('is_active')} defaultChecked className="w-4 h-4 accent-[#d00600]" />
+                    <input type="checkbox" {...register('is_active')} defaultChecked className="w-4 h-4 accent-primary" />
                     <span className="text-sm">Nhận đặt tour</span>
                   </label>
                 </Field>
@@ -138,7 +138,7 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
               <hr className="border-border" />
               <div className="flex justify-between items-center">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ảnh tour ({imgFields.length})</p>
-                <Button type="button" variant="outline" size="sm" onClick={() => addImg({ image_path: '', image_url: '', caption: '', sort_order: imgFields.length })} className="border-dashed border-[#d00600] text-[#d00600] hover:text-[#d00600]">+ Thêm ảnh</Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => addImg({ image_path: '', image_url: '', caption: '', sort_order: imgFields.length })} className="border-dashed border-primary text-primary hover:text-primary">+ Thêm ảnh</Button>
               </div>
               {imgFields.map((field, i) => (
                 <div key={field.id} className="border border-border rounded-lg p-3 flex gap-3 items-start">
@@ -159,7 +159,7 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
               <hr className="border-border" />
               <div className="flex justify-between items-center">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Lịch trình ngày ({dayFields.length})</p>
-                <Button type="button" variant="outline" size="sm" onClick={() => addDay({ day_number: dayFields.length + 1, title: '', content_md: '' })} className="border-dashed border-[#d00600] text-[#d00600] hover:text-[#d00600]">+ Thêm ngày</Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => addDay({ day_number: dayFields.length + 1, title: '', content_md: '' })} className="border-dashed border-primary text-primary hover:text-primary">+ Thêm ngày</Button>
               </div>
               {dayFields.map((field, i) => (
                 <div key={field.id} className="border border-border rounded-lg p-3 flex flex-col gap-2">

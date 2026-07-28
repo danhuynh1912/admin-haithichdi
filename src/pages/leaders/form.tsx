@@ -200,7 +200,7 @@ export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
 
             <Field label="Active">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" {...register('is_active')} className="w-4 h-4 accent-[#d00600]" />
+                <input type="checkbox" {...register('is_active')} className="w-4 h-4 accent-primary" />
                 <span className="text-sm">Hiện trên trang About</span>
               </label>
             </Field>

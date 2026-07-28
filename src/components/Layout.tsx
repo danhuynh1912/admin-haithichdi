@@ -13,13 +13,17 @@ export function Layout() {
   const { mutate: logout } = useLogout();
   return (
     <div className="flex h-screen font-sans">
-      <aside className="w-56 bg-[#111] flex flex-col p-4 gap-1 shrink-0">
-        <div className="text-[#d00600] font-extrabold text-lg px-2 py-3 mb-2 tracking-tight">
+      <aside className="w-56 shrink-0 flex flex-col gap-1 p-4 bg-sidebar border-r border-sidebar-border">
+        <div className="px-2 py-3 mb-2 text-lg font-extrabold tracking-tight text-sidebar-primary">
           Hải Thích Đi
         </div>
         {NAV.map(({ to, label, icon: Icon }) => (
           <NavLink key={to} to={to} className={({ isActive }) =>
-            `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm no-underline transition-colors ${isActive ? 'bg-[#d00600] text-white font-semibold' : 'text-[#888] hover:text-white hover:bg-white/10'}`
+            `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm no-underline transition-colors ${
+              isActive
+                ? 'bg-sidebar-primary text-sidebar-primary-foreground font-semibold'
+                : 'text-sidebar-foreground/60 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent'
+            }`
           }>
             <Icon size={15} strokeWidth={1.75} />
             {label}
@@ -28,13 +32,13 @@ export function Layout() {
         <div className="flex-1" />
         <button
           onClick={() => logout()}
-          className="flex items-center gap-2.5 px-3 py-2.5 text-sm text-[#555] rounded-lg hover:text-[#aaa] transition-colors bg-transparent cursor-pointer border-none"
+          className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent transition-colors bg-transparent cursor-pointer border-none"
         >
           <LogOut size={15} strokeWidth={1.75} />
           Đăng xuất
         </button>
       </aside>
-      <main className="flex-1 overflow-auto bg-gray-50">
+      <main className="flex-1 overflow-auto bg-background">
         <Outlet />
       </main>
     </div>

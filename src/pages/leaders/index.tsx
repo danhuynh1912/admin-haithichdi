@@ -53,7 +53,7 @@ export function LeaderList() {
         const url = resolveMediaUrl(r.avatar_path, r.avatar_url);
         return url
           ? <img src={url} alt="" className="w-9 h-9 object-cover rounded-full" />
-          : <div className="w-9 h-9 rounded-full bg-[#d00600] flex items-center justify-center text-white font-bold text-sm">{(r.full_name || emailToUsername(r.email))[0]?.toUpperCase()}</div>;
+          : <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm">{(r.full_name || emailToUsername(r.email))[0]?.toUpperCase()}</div>;
       },
     }),
     col.accessor('full_name', { header: 'Họ tên' }),

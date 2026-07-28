@@ -1,5 +1,9 @@
 import { useState } from 'react';
 import { useLogin } from '@refinedev/core';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent } from '@/components/ui/card';
 
 export function Login() {
   const [username, setUsername] = useState('');
@@ -12,45 +16,47 @@ export function Login() {
   }
 
   return (
-    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111' }}>
-      <form
-        onSubmit={handleSubmit}
-        style={{ background: '#1a1a1a', padding: 40, borderRadius: 16, width: 360, display: 'flex', flexDirection: 'column', gap: 16, border: '1px solid #222' }}
-      >
-        <h1 style={{ color: '#d00600', margin: 0, fontSize: 24, fontWeight: 800 }}>Hải Thích Đi</h1>
-        <p style={{ color: '#666', margin: 0, fontSize: 14 }}>Admin Panel</p>
+    <div className="min-h-screen flex items-center justify-center bg-muted p-4">
+      <Card className="w-full max-w-sm">
+        <CardContent className="pt-6">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div>
+              <h1 className="text-2xl font-extrabold tracking-tight text-primary">Hải Thích Đi</h1>
+              <p className="text-sm text-muted-foreground">Admin Panel</p>
+            </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ color: '#aaa', fontSize: 13 }}>Tên đăng nhập</label>
-          <input
-            type="text"
-            autoComplete="username"
-            autoCapitalize="none"
-            spellCheck={false}
-            value={username}
-            onChange={e => setUsername(e.target.value)}
-            required
-            style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #333', background: '#222', color: '#fff', fontSize: 14 }}
-          />
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ color: '#aaa', fontSize: 13 }}>Mật khẩu</label>
-          <input
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-            style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #333', background: '#222', color: '#fff', fontSize: 14 }}
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={isLoading}
-          style={{ padding: '12px', background: '#d00600', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 15, cursor: isLoading ? 'not-allowed' : 'pointer' }}
-        >
-          {isLoading ? 'Đang đăng nhập…' : 'Đăng nhập'}
-        </button>
-      </form>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="username">Tên đăng nhập</Label>
+              <Input
+                id="username"
+                type="text"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="password">Mật khẩu</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+              />
+            </div>
+
+            <Button type="submit" size="lg" disabled={isLoading} className="mt-2">
+              {isLoading ? 'Đang đăng nhập…' : 'Đăng nhập'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }
