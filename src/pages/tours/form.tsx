@@ -10,10 +10,12 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-interface TourImage { id?: number; image_path: string; image_url: string; caption: string; sort_order: number; }
-interface ItineraryDay { id?: number; day_number: number; title: string; content_md: string; }
+import { BilingualField, EN_PLACEHOLDER } from '@/components/BilingualField';
+interface TourImage { id?: number; image_path: string; image_url: string; caption: string; caption_en: string; sort_order: number; }
+interface ItineraryDay { id?: number; day_number: number; title: string; title_en: string; content_md: string; content_md_en: string; }
 interface TourFormData {
   title: string; summary: string; description_md: string; itinerary_md: string;
+  title_en: string; summary_en: string; description_md_en: string; itinerary_md_en: string;
   start_date: string; end_date: string; price: string; location_id: number;
   max_guests: number; is_active: boolean;
   images: TourImage[]; itinerary_days: ItineraryDay[];
@@ -95,9 +97,13 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
           <CardContent className="pt-6">
             <form onSubmit={handleSubmit(handleSubmitWithRelated as never)} className="flex flex-col gap-5">
 
-              <Field label="Tiêu đề *" error={errors.title?.message as string}>
-                <Input {...register('title', { required: 'Bắt buộc' })} />
-              </Field>
+              <BilingualField
+                label="Tiêu đề *"
+                error={errors.title?.message as string}
+                hint="Tiêu đề vào SEO title và hiện ở mọi danh sách tour — nên dịch."
+                vi={<Input {...register('title', { required: 'Bắt buộc' })} />}
+                en={<Input {...register('title_en')} placeholder={EN_PLACEHOLDER} />}
+              />
 
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Location *">
@@ -128,20 +134,27 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
                 </Field>
               </div>
 
-              <Field label="Tóm tắt">
-                <Textarea {...register('summary')} rows={2} />
-              </Field>
-              <Field label="Mô tả (Markdown)">
-                <Textarea {...register('description_md')} rows={5} className="font-mono" />
-              </Field>
-              <Field label="Lịch trình tổng (Markdown)">
-                <Textarea {...register('itinerary_md')} rows={5} className="font-mono" />
-              </Field>
+              <BilingualField
+                label="Tóm tắt"
+                hint="Hiện ngay dưới tiêu đề ở trang booking — nên dịch."
+                vi={<Textarea {...register('summary')} rows={2} />}
+                en={<Textarea {...register('summary_en')} rows={2} placeholder={EN_PLACEHOLDER} />}
+              />
+              <BilingualField
+                label="Mô tả (Markdown)"
+                vi={<Textarea {...register('description_md')} rows={5} className="font-mono" />}
+                en={<Textarea {...register('description_md_en')} rows={5} className="font-mono" placeholder={EN_PLACEHOLDER} />}
+              />
+              <BilingualField
+                label="Lịch trình tổng (Markdown)"
+                vi={<Textarea {...register('itinerary_md')} rows={5} className="font-mono" />}
+                en={<Textarea {...register('itinerary_md_en')} rows={5} className="font-mono" placeholder={EN_PLACEHOLDER} />}
+              />
 
               <hr className="border-border" />
               <div className="flex justify-between items-center">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ảnh tour ({imgFields.length})</p>
-                <Button type="button" variant="outline" size="sm" onClick={() => addImg({ image_path: '', image_url: '', caption: '', sort_order: imgFields.length })} className="border-dashed border-primary text-primary hover:text-primary">+ Thêm ảnh</Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => addImg({ image_path: '', image_url: '', caption: '', caption_en: '', sort_order: imgFields.length })} className="border-dashed border-primary text-primary hover:text-primary">+ Thêm ảnh</Button>
               </div>
               {imgFields.map((field, i) => (
                 <div key={field.id} className="border border-border rounded-lg p-3 flex gap-3 items-start">
@@ -153,7 +166,10 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
                   />
                   <div className="flex-1 flex flex-col gap-2">
                     <Input placeholder="Hoặc URL ngoài" {...register(`images.${i}.image_url`)} />
-                    <Input placeholder="Caption" {...register(`images.${i}.caption`)} />
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input placeholder="Caption (VI)" {...register(`images.${i}.caption`)} />
+                      <Input placeholder="Caption (EN)" {...register(`images.${i}.caption_en`)} />
+                    </div>
                   </div>
                   <button type="button" onClick={() => removeImg(i)} className="text-destructive text-lg p-1 bg-transparent border-none cursor-pointer">×</button>
                 </div>
@@ -162,16 +178,20 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
               <hr className="border-border" />
               <div className="flex justify-between items-center">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Lịch trình ngày ({dayFields.length})</p>
-                <Button type="button" variant="outline" size="sm" onClick={() => addDay({ day_number: dayFields.length + 1, title: '', content_md: '' })} className="border-dashed border-primary text-primary hover:text-primary">+ Thêm ngày</Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => addDay({ day_number: dayFields.length + 1, title: '', title_en: '', content_md: '', content_md_en: '' })} className="border-dashed border-primary text-primary hover:text-primary">+ Thêm ngày</Button>
               </div>
               {dayFields.map((field, i) => (
                 <div key={field.id} className="border border-border rounded-lg p-3 flex flex-col gap-2">
                   <div className="flex gap-2 items-center">
                     <span className="font-bold text-sm min-w-[60px]">Ngày {i + 1}</span>
-                    <Input placeholder="Tiêu đề ngày" {...register(`itinerary_days.${i}.title`)} className="flex-1" />
+                    <Input placeholder="Tiêu đề ngày (VI)" {...register(`itinerary_days.${i}.title`)} className="flex-1" />
+                    <Input placeholder="Tiêu đề ngày (EN)" {...register(`itinerary_days.${i}.title_en`)} className="flex-1" />
                     <button type="button" onClick={() => removeDay(i)} className="text-destructive text-lg bg-transparent border-none cursor-pointer">×</button>
                   </div>
-                  <Textarea placeholder="Nội dung (Markdown)" {...register(`itinerary_days.${i}.content_md`)} rows={4} className="font-mono" />
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <Textarea placeholder="Nội dung VI (Markdown)" {...register(`itinerary_days.${i}.content_md`)} rows={4} className="font-mono" />
+                    <Textarea placeholder="Nội dung EN (Markdown)" {...register(`itinerary_days.${i}.content_md_en`)} rows={4} className="font-mono" />
+                  </div>
                 </div>
               ))}
 

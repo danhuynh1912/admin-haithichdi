@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
+import { BilingualField, EN_PLACEHOLDER } from '@/components/BilingualField';
 
 interface LocationFormData {
   name: string;
@@ -18,6 +19,10 @@ interface LocationFormData {
   home_display_name: string;
   home_subtitle: string;
   home_feature_summary: string;
+  description_en: string;
+  home_display_name_en: string;
+  home_subtitle_en: string;
+  home_feature_summary_en: string;
   home_feature_order: number | null;
 }
 
@@ -67,9 +72,11 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
               <Input type="number" {...register('elevation_m', { required: 'Bắt buộc', valueAsNumber: true })} />
             </Field>
 
-            <Field label="Mô tả">
-              <Textarea {...register('description')} rows={3} />
-            </Field>
+            <BilingualField
+              label="Mô tả"
+              vi={<Textarea {...register('description')} rows={3} />}
+              en={<Textarea {...register('description_en')} rows={3} placeholder={EN_PLACEHOLDER} />}
+            />
 
             <ImageUpload
               prefix="locations/images"
@@ -97,17 +104,23 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
             <hr className="border-border" />
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Trang chủ</p>
 
-            <Field label="Tên hiển thị trang chủ (để trống = dùng tên gốc)">
-              <Input {...register('home_display_name')} />
-            </Field>
+            <BilingualField
+              label="Tên hiển thị trang chủ (để trống = dùng tên gốc)"
+              vi={<Input {...register('home_display_name')} />}
+              en={<Input {...register('home_display_name_en')} placeholder={EN_PLACEHOLDER} />}
+            />
 
-            <Field label="Subtitle trang chủ">
-              <Input {...register('home_subtitle')} />
-            </Field>
+            <BilingualField
+              label="Subtitle trang chủ"
+              vi={<Input {...register('home_subtitle')} />}
+              en={<Input {...register('home_subtitle_en')} placeholder={EN_PLACEHOLDER} />}
+            />
 
-            <Field label="Tóm tắt trang chủ">
-              <Textarea {...register('home_feature_summary')} rows={2} />
-            </Field>
+            <BilingualField
+              label="Tóm tắt trang chủ"
+              vi={<Textarea {...register('home_feature_summary')} rows={2} />}
+              en={<Textarea {...register('home_feature_summary_en')} rows={2} placeholder={EN_PLACEHOLDER} />}
+            />
 
             <Field label="Thứ tự featured (1–4, để trống = không hiển thị)">
               <Input
