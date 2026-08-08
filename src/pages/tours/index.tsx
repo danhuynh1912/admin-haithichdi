@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge';
 interface Tour {
   id: number;
   title: string;
+  title_en: string | null;
+  summary_en: string | null;
   start_date: string | null;
   end_date: string | null;
   price: string | null;
@@ -32,6 +34,22 @@ export function TourList() {
     col.accessor('is_active', {
       header: 'Active', size: 80,
       cell: i => <Badge variant={i.getValue() ? 'success' : 'secondary'}>{i.getValue() ? 'ON' : 'OFF'}</Badge>,
+    }),
+    // Flags the two fields that actually matter for an English visitor: the
+    // title (SEO + every list) and the summary (under the h1 on the booking
+    // page). Long-form markdown is deliberately not counted here.
+    col.display({
+      id: 'i18n', header: 'EN', size: 90,
+      cell: info => {
+        const { title_en, summary_en } = info.row.original;
+        const done = Boolean(title_en?.trim()) && Boolean(summary_en?.trim());
+        const partial = Boolean(title_en?.trim()) || Boolean(summary_en?.trim());
+        return (
+          <Badge variant={done ? 'success' : 'secondary'}>
+            {done ? 'Đã dịch' : partial ? 'Thiếu' : 'Chưa dịch'}
+          </Badge>
+        );
+      },
     }),
     col.display({
       id: 'actions', header: '',

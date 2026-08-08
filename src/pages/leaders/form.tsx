@@ -12,11 +12,14 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
+import { BilingualField, EN_PLACEHOLDER } from '@/components/BilingualField';
 
 interface LeaderFormData {
   username: string; password: string;
   full_name: string; display_role: string; bio: string; highlight: string;
   location: string; relationship_status: string; date_of_birth: string;
+  display_role_en: string; bio_en: string; highlight_en: string;
+  location_en: string; strengths_en: string[];
   years_experience: number; is_active: boolean;
   avatar_path: string; avatar_url: string; strengths: string[];
   role: string;
@@ -43,6 +46,7 @@ function toProfilePayload(v: LeaderFormData) {
     date_of_birth: profile.date_of_birth || null,
     years_experience: Number.isFinite(profile.years_experience) ? profile.years_experience : 0,
     strengths: profile.strengths ?? [],
+    strengths_en: profile.strengths_en ?? [],
   };
 }
 
@@ -68,6 +72,8 @@ export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
 
   const { field: strengthsField } = useController({ control, name: 'strengths', defaultValue: [] });
   const strengthsStr = (strengthsField.value ?? []).join('\n');
+  const { field: strengthsEnField } = useController({ control, name: 'strengths_en', defaultValue: [] });
+  const strengthsEnStr = (strengthsEnField.value ?? []).join('\n');
 
   async function onSubmit(raw: Record<string, unknown>) {
     const values = raw as unknown as LeaderFormData;
@@ -164,8 +170,11 @@ export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
                   <option value="admin">Admin</option>
                 </select>
               </Field>
-              <Field label="Chức danh hiển thị">
+              <Field label="Chức danh hiển thị (VI)">
                 <Input {...register('display_role')} placeholder="Trek Leader" />
+              </Field>
+              <Field label="Chức danh hiển thị (EN)">
+                <Input {...register('display_role_en')} placeholder={EN_PLACEHOLDER} />
               </Field>
               <Field label="Kinh nghiệm (năm)">
                 <Input type="number" {...register('years_experience', { valueAsNumber: true })} />
@@ -182,25 +191,44 @@ export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
                   <option value="hidden">Hidden</option>
                 </select>
               </Field>
-              <Field label="Địa điểm">
+              <Field label="Địa điểm (VI)">
                 <Input {...register('location')} placeholder="TP. Hồ Chí Minh" />
+              </Field>
+              <Field label="Địa điểm (EN)">
+                <Input {...register('location_en')} placeholder={EN_PLACEHOLDER} />
               </Field>
             </div>
 
-            <Field label="Bio">
-              <Textarea {...register('bio')} rows={3} />
-            </Field>
-            <Field label="Highlight (câu mô tả ngắn)">
-              <Textarea {...register('highlight')} rows={2} />
-            </Field>
-            <Field label="Strengths (mỗi dòng 1 strength)">
-              <Textarea
-                value={strengthsStr}
-                onChange={e => strengthsField.onChange(e.target.value.split('\n').map(s => s.trim()).filter(Boolean))}
-                rows={4}
-                placeholder={"Thể lực bền bỉ\nKĩ năng dẫn đoàn\nXử lý tình huống"}
-              />
-            </Field>
+            <BilingualField
+              label="Bio"
+              vi={<Textarea {...register('bio')} rows={3} />}
+              en={<Textarea {...register('bio_en')} rows={3} placeholder={EN_PLACEHOLDER} />}
+            />
+            <BilingualField
+              label="Highlight (câu mô tả ngắn)"
+              vi={<Textarea {...register('highlight')} rows={2} />}
+              en={<Textarea {...register('highlight_en')} rows={2} placeholder={EN_PLACEHOLDER} />}
+            />
+            <BilingualField
+              label="Strengths (mỗi dòng 1 strength)"
+              hint="Danh sách EN để trống sẽ dùng nguyên danh sách tiếng Việt."
+              vi={
+                <Textarea
+                  value={strengthsStr}
+                  onChange={e => strengthsField.onChange(e.target.value.split('\n').map(s => s.trim()).filter(Boolean))}
+                  rows={4}
+                  placeholder={"Thể lực bền bỉ\nKĩ năng dẫn đoàn\nXử lý tình huống"}
+                />
+              }
+              en={
+                <Textarea
+                  value={strengthsEnStr}
+                  onChange={e => strengthsEnField.onChange(e.target.value.split('\n').map(s => s.trim()).filter(Boolean))}
+                  rows={4}
+                  placeholder={"Endurance\nGroup leadership\nProblem solving"}
+                />
+              }
+            />
 
             <Field label="Active">
               <label className="flex items-center gap-2 cursor-pointer">
