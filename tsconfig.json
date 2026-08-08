@@ -10,6 +10,9 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
+    // Vite compiles; `tsc` here is typecheck-only. Without this it emits .js
+    // next to every source file.
+    "noEmit": true,
     "paths": {
       "@/*": ["./src/*"]
     }
