@@ -1,9 +1,11 @@
+import { useState, type ReactNode } from 'react';
 import { useTable } from '@refinedev/react-table';
-import { useUpdate } from '@refinedev/core';
+import { useList, useUpdate, type CrudFilter } from '@refinedev/core';
 import { createColumnHelper, getCoreRowModel } from '@tanstack/react-table';
 import { DataTable } from '@/components/DataTable';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Modal } from '@/components/ui/dialog';
 
 interface Booking {
   id: number;
@@ -17,6 +19,19 @@ interface Booking {
   note: string;
   created_at: string;
   tour_id: number;
+  // Embedded by `SELECT_WITH_TOUR` below — a booking always has a tour, but
+  // PostgREST types the embed as nullable, so guard when reading it.
+  tours: {
+    id: number;
+    title: string;
+    location_id: number;
+    locations: { id: number; name: string } | null;
+  } | null;
+}
+
+interface LocationOption {
+  id: number;
+  name: string;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -25,33 +40,63 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: 'Đã hủy',
 };
 
+// `tours!inner` is what makes the `tours.location_id` filter narrow the
+// bookings themselves rather than just blanking out the embed.
+const SELECT_WITH_TOUR = '*, tours!inner(id, title, location_id, locations(id, name))';
+
 const selectCls = "flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+
+const statusVariant = (s: string) =>
+  s === 'confirmed' ? 'success' : s === 'pending' ? 'warning' : 'destructive';
+
+const formatDate = (value: string | null) =>
+  value ? new Date(value).toLocaleDateString('vi-VN') : '—';
 
 const col = createColumnHelper<Booking>();
 
 export function BookingList() {
   const { mutate: update } = useUpdate<Booking>();
+  const [locationId, setLocationId] = useState('');
+  const [status, setStatus] = useState('');
+  const [openId, setOpenId] = useState<number | null>(null);
+
+  const { query: locationsQuery } = useList<LocationOption>({
+    resource: 'locations',
+    pagination: { pageSize: 100 },
+    sorters: [{ field: 'name', order: 'asc' }],
+  });
+  const locations = locationsQuery?.data?.data ?? [];
+
+  const filters: CrudFilter[] = [];
+  if (locationId) filters.push({ field: 'tours.location_id', operator: 'eq', value: Number(locationId) });
+  if (status) filters.push({ field: 'status', operator: 'eq', value: status });
 
   const columns = [
-    col.accessor('id', { header: 'ID', size: 60 }),
-    col.accessor('full_name', { header: 'Họ tên' }),
+    col.accessor('full_name', {
+      header: 'Họ tên',
+      cell: info => (
+        <button
+          type="button"
+          onClick={() => setOpenId(info.row.original.id)}
+          className="font-medium text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          {info.getValue()}
+        </button>
+      ),
+    }),
     col.accessor('phone', { header: 'SĐT' }),
-    col.accessor('email', { header: 'Email' }),
-    col.accessor('tour_id', { header: 'Tour ID', size: 80 }),
-    col.accessor('medal_name', { header: 'Tên HCV' }),
-    col.accessor('dob', { header: 'Ngày sinh', size: 110 }),
-    col.accessor('created_at', {
-      header: 'Ngày đặt',
-      cell: info => new Date(info.getValue() ?? '').toLocaleDateString('vi-VN'),
+    col.display({
+      id: 'location',
+      header: 'Cung',
+      cell: info => info.row.original.tours?.locations?.name ?? '—',
     }),
     col.accessor('status', {
       header: 'Trạng thái',
       cell: info => {
-        const status = info.getValue();
         const id = info.row.original.id;
         return (
           <select
-            value={status}
+            value={info.getValue()}
             onChange={e => update({ resource: 'bookings', id, values: { status: e.target.value } })}
             className={selectCls}
           >
@@ -62,13 +107,9 @@ export function BookingList() {
         );
       },
     }),
-    col.display({
-      id: 'badge', header: '',
-      cell: info => {
-        const s = info.row.original.status;
-        const variant = s === 'confirmed' ? 'success' : s === 'pending' ? 'warning' : 'destructive';
-        return <Badge variant={variant}>{STATUS_LABEL[s]}</Badge>;
-      },
+    col.accessor('created_at', {
+      header: 'Ngày đặt',
+      cell: info => formatDate(info.getValue()),
     }),
   ];
 
@@ -76,6 +117,8 @@ export function BookingList() {
     columns,
     refineCoreProps: {
       resource: 'bookings',
+      meta: { select: SELECT_WITH_TOUR },
+      filters: { permanent: filters },
       sorters: { initial: [{ field: 'created_at', order: 'desc' }] },
       pagination: { pageSize: 30 },
     },
@@ -84,14 +127,92 @@ export function BookingList() {
 
   const { pageCount, currentPage, setCurrentPage } = table.refineCore;
 
+  // Read the open booking back out of the list instead of snapshotting it, so
+  // a status change made from the table is reflected inside the modal.
+  const rows = (table.refineCore.tableQuery.data?.data ?? []) as Booking[];
+  const openBooking = rows.find(b => b.id === openId) ?? null;
+
+  // Filtering can land the user past the end of the shorter result set.
+  const resetPage = () => setCurrentPage(1);
+
   return (
     <div className="p-6">
-      <h2 className="text-xl font-bold mb-5">📋 Bookings</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <h2 className="text-xl font-bold">📋 Bookings</h2>
+        <div className="flex flex-wrap gap-2">
+          <select
+            aria-label="Lọc theo cung"
+            value={locationId}
+            onChange={e => { setLocationId(e.target.value); resetPage(); }}
+            className={selectCls}
+          >
+            <option value="">Tất cả cung</option>
+            {locations.map(l => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+          <select
+            aria-label="Lọc theo trạng thái"
+            value={status}
+            onChange={e => { setStatus(e.target.value); resetPage(); }}
+            className={selectCls}
+          >
+            <option value="">Tất cả trạng thái</option>
+            {Object.entries(STATUS_LABEL).map(([val, label]) => (
+              <option key={val} value={val}>{label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       <DataTable table={table} emptyText="Chưa có booking nào." />
+
       <div className="flex gap-2 mt-4 items-center">
         <Button variant="outline" size="sm" onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage <= 1}>←</Button>
         <span className="text-sm text-muted-foreground">Trang {currentPage} / {pageCount}</span>
         <Button variant="outline" size="sm" onClick={() => setCurrentPage(currentPage + 1)} disabled={currentPage >= pageCount}>→</Button>
+      </div>
+
+      <Modal
+        open={Boolean(openBooking)}
+        onClose={() => setOpenId(null)}
+        title={openBooking?.full_name ?? ''}
+        description={openBooking ? `Booking #${openBooking.id}` : undefined}
+      >
+        {openBooking ? <BookingDetails booking={openBooking} /> : null}
+      </Modal>
+    </div>
+  );
+}
+
+function BookingDetails({ booking }: { booking: Booking }) {
+  const rows: [string, ReactNode][] = [
+    ['Trạng thái', <Badge variant={statusVariant(booking.status)}>{STATUS_LABEL[booking.status]}</Badge>],
+    ['Số điện thoại', booking.phone || '—'],
+    ['Email', booking.email || '—'],
+    ['Cung', booking.tours?.locations?.name ?? '—'],
+    ['Tour', booking.tours?.title ?? `#${booking.tour_id}`],
+    ['Tên HCV', booking.medal_name || '—'],
+    ['Ngày sinh', formatDate(booking.dob)],
+    ['CCCD/CMND', booking.citizen_id || '—'],
+    ['Ngày đặt', new Date(booking.created_at).toLocaleString('vi-VN')],
+  ];
+
+  return (
+    <div className="text-sm">
+      <dl className="divide-y divide-border">
+        {rows.map(([label, value]) => (
+          <div key={label} className="grid grid-cols-[9rem_1fr] gap-3 py-2.5">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="font-medium break-words">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="mt-4">
+        <p className="text-muted-foreground mb-1">Ghi chú</p>
+        <p className="whitespace-pre-wrap rounded-md bg-muted/50 p-3">
+          {booking.note?.trim() || '—'}
+        </p>
       </div>
     </div>
   );
