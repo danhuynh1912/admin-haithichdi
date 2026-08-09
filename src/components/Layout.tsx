@@ -1,12 +1,13 @@
 import { useLogout } from '@refinedev/core';
 import { NavLink, Outlet } from 'react-router-dom';
-import { MapPin, Mountain, ClipboardList, Users, LogOut } from 'lucide-react';
+import { MapPin, Mountain, ClipboardList, Users, Newspaper, LogOut } from 'lucide-react';
 import { useRole } from '@/components/RequireAdmin';
 
 const NAV = [
   { to: '/locations', label: 'Locations', icon: MapPin, adminOnly: true },
   { to: '/tours', label: 'Tours', icon: Mountain, adminOnly: true },
   { to: '/bookings', label: 'Bookings', icon: ClipboardList, adminOnly: false },
+  { to: '/blogs', label: 'Blog', icon: Newspaper, adminOnly: true },
   { to: '/staff', label: 'Tài khoản', icon: Users, adminOnly: true },
 ];
 

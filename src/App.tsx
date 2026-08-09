@@ -12,6 +12,9 @@ import { LocationForm } from '@/pages/locations/form';
 import { TourList } from '@/pages/tours';
 import { TourForm } from '@/pages/tours/form';
 import { BookingList } from '@/pages/bookings';
+import { BlogList } from '@/pages/blogs';
+import { BlogForm } from '@/pages/blogs/form';
+import { BlogTagList } from '@/pages/blog-tags';
 import { StaffList } from '@/pages/staff';
 import { StaffForm } from '@/pages/staff/form';
 
@@ -30,6 +33,10 @@ export default function App() {
           // Read-only from the tour form, which previews what the route lends it.
           { name: 'location_images' },
           { name: 'location_itinerary_days' },
+          { name: 'blogs', list: '/blogs', create: '/blogs/create', edit: '/blogs/edit/:id' },
+          { name: 'blog_tags', list: '/blog-tags' },
+          { name: 'blog_post_tags' },
+          { name: 'blog_images' },
           // table is `profiles`; the list reads the `staff_admin` view (adds email)
           { name: 'profiles', list: '/staff', create: '/staff/create', edit: '/staff/edit/:id', meta: { label: 'Tài khoản' } },
           { name: 'staff_admin', list: '/staff' },
@@ -51,6 +58,10 @@ export default function App() {
             <Route path="/tours" element={<RequireAdmin><TourList /></RequireAdmin>} />
             <Route path="/tours/create" element={<RequireAdmin><TourForm mode="create" /></RequireAdmin>} />
             <Route path="/tours/edit/:id" element={<RequireAdmin><TourForm mode="edit" /></RequireAdmin>} />
+            <Route path="/blogs" element={<RequireAdmin><BlogList /></RequireAdmin>} />
+            <Route path="/blogs/create" element={<RequireAdmin><BlogForm mode="create" /></RequireAdmin>} />
+            <Route path="/blogs/edit/:id" element={<RequireAdmin><BlogForm mode="edit" /></RequireAdmin>} />
+            <Route path="/blog-tags" element={<RequireAdmin><BlogTagList /></RequireAdmin>} />
             <Route path="/staff" element={<RequireAdmin><StaffList /></RequireAdmin>} />
             <Route path="/staff/create" element={<RequireAdmin><StaffForm mode="create" /></RequireAdmin>} />
             <Route path="/staff/edit/:id" element={<RequireAdmin><StaffForm mode="edit" /></RequireAdmin>} />

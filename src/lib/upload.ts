@@ -1,6 +1,12 @@
 import { supabase } from './supabase';
 
-export type MediaPrefix = 'locations/images' | 'locations/quotations' | 'tours/images' | 'profiles/avatars';
+export type MediaPrefix =
+  | 'locations/images'
+  | 'locations/quotations'
+  | 'tours/images'
+  | 'profiles/avatars'
+  | 'blog/heroes'
+  | 'blog/images';
 
 /** Lossy but visually clean for photographs; well below JPEG at the same look. */
 const WEBP_QUALITY = 0.82;
