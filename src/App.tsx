@@ -27,6 +27,9 @@ export default function App() {
           { name: 'locations', list: '/locations', create: '/locations/create', edit: '/locations/edit/:id' },
           { name: 'tours', list: '/tours', create: '/tours/create', edit: '/tours/edit/:id' },
           { name: 'bookings', list: '/bookings' },
+          // Read-only from the tour form, which previews what the route lends it.
+          { name: 'location_images' },
+          { name: 'location_itinerary_days' },
           // table is `profiles`; the list reads the `staff_admin` view (adds email)
           { name: 'profiles', list: '/staff', create: '/staff/create', edit: '/staff/edit/:id', meta: { label: 'Tài khoản' } },
           { name: 'staff_admin', list: '/staff' },

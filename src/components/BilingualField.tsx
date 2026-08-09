@@ -13,18 +13,24 @@ export function BilingualField({
   label,
   error,
   hint,
+  action,
   vi,
   en,
 }: {
   label: string;
   error?: string;
   hint?: string;
+  /** Rendered opposite the label — used for the inherit/override control. */
+  action?: ReactNode;
   vi: ReactNode;
   en: ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <Label>{label}</Label>
+      <div className="flex items-center justify-between gap-3">
+        <Label>{label}</Label>
+        {action}
+      </div>
       <div className="grid gap-3 md:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <LocaleTag code="VI" tone="primary" />

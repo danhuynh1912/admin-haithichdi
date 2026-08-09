@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from '@refinedev/react-hook-form';
 import { useList, useNavigation } from '@refinedev/core';
-import { useFieldArray } from 'react-hook-form';
-import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { Input } from '@/components/ui/input';
@@ -10,13 +8,83 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { BilingualField, EN_PLACEHOLDER } from '@/components/BilingualField';
-interface ItineraryDay { id?: number; day_number: number; title: string; title_en: string; content_md: string; content_md_en: string; }
 interface TourFormData {
   title: string; summary: string; description_md: string; itinerary_md: string;
   title_en: string; summary_en: string; description_md_en: string; itinerary_md_en: string;
   start_date: string; end_date: string; price: string; location_id: number;
   max_guests: number; is_active: boolean;
-  itinerary_days: ItineraryDay[];
+}
+
+/** The columns a route carries as a starting point for its tours. */
+interface RouteDefaults {
+  id: number;
+  name: string;
+  default_summary: string;
+  default_summary_en: string;
+  default_description_md: string;
+  default_description_md_en: string;
+  default_itinerary_md: string;
+  default_itinerary_md_en: string;
+  default_price: string | null;
+  default_max_guests: number;
+}
+
+/** The fields a tour may either inherit from its route or hold its own copy of. */
+type InheritableField = 'summary' | 'description_md' | 'itinerary_md';
+
+const ROUTE_SELECT =
+  'id,name,default_summary,default_summary_en,default_description_md,' +
+  'default_description_md_en,default_itinerary_md,default_itinerary_md_en,' +
+  'default_price,default_max_guests';
+
+/** What a tour is called before anyone renames it. */
+const autoTitle = (routeName: string) => `Chinh phục ${routeName}`;
+
+/**
+ * The route's copy, shown as-is so the admin can read what this tour will say
+ * before saving. Nothing is copied into the tour until they ask to edit it.
+ */
+function InheritedField({
+  label,
+  vi,
+  en,
+  onEdit,
+}: {
+  label: string;
+  vi: string;
+  en: string;
+  onEdit: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <Label>{label}</Label>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">Đang lấy từ cung</span>
+          <Button type="button" variant="outline" size="sm" onClick={onEdit}>
+            Sửa riêng tour này
+          </Button>
+        </div>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <ReadOnlyText code="VI" text={vi} />
+        <ReadOnlyText code="EN" text={en || vi} fellBack={!en.trim()} />
+      </div>
+    </div>
+  );
+}
+
+function ReadOnlyText({ code, text, fellBack = false }: { code: string; text: string; fellBack?: boolean }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="w-fit rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {code}{fellBack && ' · theo tiếng Việt'}
+      </span>
+      <div className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+        {text.trim() || '—'}
+      </div>
+    </div>
+  );
 }
 
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
@@ -33,42 +101,148 @@ const selectCls = "flex h-10 w-full rounded-md border border-input bg-background
 
 export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
   const { list, edit } = useNavigation();
-  const { query: locationsQuery } = useList({ resource: 'locations', pagination: { pageSize: 100 } });
+  const { query: locationsQuery } = useList<RouteDefaults>({
+    resource: 'locations',
+    pagination: { pageSize: 100 },
+    meta: { select: ROUTE_SELECT },
+  });
+  const routes = locationsQuery?.data?.data ?? [];
 
   const {
-    register, handleSubmit, control, watch, setValue,
-    refineCore: { onFinish, formLoading, id },
+    register, handleSubmit, watch, setValue,
+    refineCore: { onFinish, formLoading },
     formState: { errors },
   } = useForm<TourFormData>({ refineCoreProps: { resource: 'tours' } });
 
-  const { fields: dayFields, append: addDay, remove: removeDay } = useFieldArray({ control, name: 'itinerary_days' });
-
   const selectedLocationId = watch('location_id');
+  const route = routes.find(r => r.id === Number(selectedLocationId));
 
-  const [loadingRelated, setLoadingRelated] = useState(mode === 'edit');
+  // Read-only look at what the route contributes, so the tour can be reviewed
+  // whole before saving without any of it being copied in.
+  const routeFilter = selectedLocationId
+    ? [{ field: 'location_id', operator: 'eq' as const, value: Number(selectedLocationId) }]
+    : [];
+  const enabled = { enabled: Boolean(selectedLocationId) };
+  const { query: daysQuery } = useList<{ id: number; day_number: number; title: string }>({
+    resource: 'location_itinerary_days',
+    filters: routeFilter,
+    sorters: [{ field: 'day_number', order: 'asc' }],
+    pagination: { pageSize: 50 },
+    queryOptions: enabled,
+  });
+  const { query: imagesQuery } = useList<{ id: number }>({
+    resource: 'location_images',
+    filters: routeFilter,
+    pagination: { pageSize: 1 },
+    queryOptions: enabled,
+  });
+  const routeDays = daysQuery?.data?.data ?? [];
+  const routeImageCount = imagesQuery?.data?.total ?? 0;
+
+  // Picking a route fills in the fields a departure must own outright. Only on
+  // create, and the title is left alone once it has been renamed by hand —
+  // switching route should not throw away a title someone typed.
+  const lastRouteId = useRef<number | null>(null);
   useEffect(() => {
-    if (mode !== 'edit' || !id) return;
-    (async () => {
-      const { data: days } = await supabase
-        .from('tour_itinerary_days').select('*').eq('tour_id', id).order('day_number');
-      if (days?.length) setValue('itinerary_days', days as ItineraryDay[]);
-      setLoadingRelated(false);
-    })();
-  }, [id, mode, setValue]);
+    if (mode !== 'create' || !route || lastRouteId.current === route.id) return;
+    lastRouteId.current = route.id;
 
-  async function handleSubmitWithRelated(data: TourFormData) {
-    const { itinerary_days, ...tourData } = data;
-    const result = await onFinish(tourData) as { data?: { id: number } } | undefined;
-    const tourId = (result?.data?.id ?? id) as number;
-    if (!tourId) return;
+    const currentTitle = (watch('title') ?? '').trim();
+    const isUntouched = currentTitle === '' || routes.some(r => autoTitle(r.name) === currentTitle);
+    if (isUntouched) setValue('title', autoTitle(route.name));
 
-    if (itinerary_days?.length) {
-      await supabase.from('tour_itinerary_days').delete().eq('tour_id', tourId);
-      await supabase.from('tour_itinerary_days').insert(
-        itinerary_days.map(({ id: _id, ...d }) => ({ ...d, tour_id: tourId }))
+    setValue('max_guests', route.default_max_guests ?? 20);
+    if (route.default_price != null) setValue('price', String(route.default_price));
+  }, [mode, route, routes, setValue, watch]);
+
+  async function handleSubmitTour(data: TourFormData) {
+    await onFinish(data);
+    list('tours');
+  }
+
+  // A field is overridden when the tour holds its own text — empty means the
+  // route supplies it, exactly how tours_resolved reads it in SQL. `editing`
+  // is tracked separately so clearing the box to retype does not yank the
+  // editor away mid-edit; only Huỷ closes it.
+  const [editing, setEditing] = useState<Partial<Record<InheritableField, boolean>>>({});
+  const isOverridden = (field: InheritableField) => Boolean(String(watch(field) ?? '').trim());
+  const isEditing = (field: InheritableField) => Boolean(editing[field]) || isOverridden(field);
+
+  /** Seed the tour's own copy from the route so there is something to edit. */
+  function startOverride(field: InheritableField, viText: string, enText: string) {
+    setEditing(prev => ({ ...prev, [field]: true }));
+    setValue(field, viText as never, { shouldDirty: true });
+    setValue(`${field}_en` as keyof TourFormData, enText as never, { shouldDirty: true });
+  }
+
+  /** Throw the tour's copy away and go back to reading the route's. */
+  function cancelOverride(field: InheritableField, viText: string) {
+    const current = String(watch(field) ?? '');
+    if (current.trim() && current !== viText &&
+        !confirm('Bỏ nội dung riêng của tour này và dùng lại nội dung của cung?')) {
+      return;
+    }
+    setEditing(prev => ({ ...prev, [field]: false }));
+    setValue(field, '' as never, { shouldDirty: true });
+    setValue(`${field}_en` as keyof TourFormData, '' as never, { shouldDirty: true });
+  }
+
+  /**
+   * Three states per field: the route has nothing to lend (plain editor), the
+   * tour is reading the route (preview + "Sửa"), or the tour has its own copy
+   * (editor + "Huỷ").
+   */
+  function renderInheritable(
+    field: InheritableField,
+    label: string,
+    routeVi: string,
+    routeEn: string,
+    rows: number,
+    mono = false,
+  ) {
+    const editor = (name: keyof TourFormData, placeholder?: string) => (
+      <Textarea {...register(name)} rows={rows} className={mono ? 'font-mono' : undefined} placeholder={placeholder} />
+    );
+
+    if (!routeVi.trim()) {
+      return (
+        <BilingualField
+          label={label}
+          hint="Cung chưa có nội dung mặc định cho mục này."
+          vi={editor(field)}
+          en={editor(`${field}_en` as keyof TourFormData, EN_PLACEHOLDER)}
+        />
       );
     }
-    list('tours');
+
+    if (!isEditing(field)) {
+      return (
+        <InheritedField
+          label={label}
+          vi={routeVi}
+          en={routeEn}
+          onEdit={() => startOverride(field, routeVi, routeEn)}
+        />
+      );
+    }
+
+    return (
+      <BilingualField
+        label={label}
+        hint="Nội dung riêng của tour này. Huỷ để quay lại dùng của cung."
+        action={
+          <button
+            type="button"
+            onClick={() => cancelOverride(field, routeVi)}
+            className="text-xs font-semibold text-primary underline-offset-4 hover:underline bg-transparent border-none p-0 cursor-pointer"
+          >
+            Huỷ · dùng lại của cung
+          </button>
+        }
+        vi={editor(field)}
+        en={editor(`${field}_en` as keyof TourFormData, EN_PLACEHOLDER)}
+      />
+    );
   }
 
   return (
@@ -78,12 +252,12 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
         <h2 className="text-xl font-bold">{mode === 'create' ? 'Thêm Tour' : 'Sửa Tour'}</h2>
       </div>
 
-      {loadingRelated ? (
+      {mode === 'edit' && formLoading ? (
         <div className="flex items-center gap-2 text-muted-foreground py-12 justify-center"><Spinner /> Đang tải…</div>
       ) : (
         <Card>
           <CardContent className="pt-6">
-            <form onSubmit={handleSubmit(handleSubmitWithRelated as never)} className="flex flex-col gap-5">
+            <form onSubmit={handleSubmit(handleSubmitTour as never)} className="flex flex-col gap-5">
 
               <BilingualField
                 label="Tiêu đề *"
@@ -97,7 +271,7 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
                 <Field label="Location *">
                   <select {...register('location_id', { required: true, valueAsNumber: true })} className={selectCls}>
                     <option value="">Chọn location…</option>
-                    {((locationsQuery?.data?.data ?? []) as { id: number; name: string }[]).map((l) => (
+                    {routes.map((l) => (
                       <option key={l.id} value={l.id}>{l.name}</option>
                     ))}
                   </select>
@@ -122,60 +296,56 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
                 </Field>
               </div>
 
-              <BilingualField
-                label="Tóm tắt"
-                hint="Hiện ngay dưới tiêu đề ở trang booking — nên dịch."
-                vi={<Textarea {...register('summary')} rows={2} />}
-                en={<Textarea {...register('summary_en')} rows={2} placeholder={EN_PLACEHOLDER} />}
-              />
-              <BilingualField
-                label="Mô tả (Markdown)"
-                vi={<Textarea {...register('description_md')} rows={5} className="font-mono" />}
-                en={<Textarea {...register('description_md_en')} rows={5} className="font-mono" placeholder={EN_PLACEHOLDER} />}
-              />
-              <BilingualField
-                label="Lịch trình tổng (Markdown)"
-                vi={<Textarea {...register('itinerary_md')} rows={5} className="font-mono" />}
-                en={<Textarea {...register('itinerary_md_en')} rows={5} className="font-mono" placeholder={EN_PLACEHOLDER} />}
-              />
+              {renderInheritable('summary', 'Tóm tắt', route?.default_summary ?? '', route?.default_summary_en ?? '', 2)}
+              {renderInheritable('description_md', 'Mô tả (Markdown)', route?.default_description_md ?? '', route?.default_description_md_en ?? '', 5, true)}
+              {renderInheritable('itinerary_md', 'Lịch trình tổng (Markdown)', route?.default_itinerary_md ?? '', route?.default_itinerary_md_en ?? '', 5, true)}
 
-              {/* The gallery lives on the location now — every tour up the
-                  same route shares it, so it is uploaded once over there. */}
+              {/* Photos and the day-by-day plan belong to the route: every
+                  departure walks the same trail, so they are edited once there.
+                  Shown read-only here so the tour can be reviewed whole. */}
               <hr className="border-border" />
-              <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-                Ảnh của tour lấy theo <strong className="font-semibold text-foreground">Cung</strong>.{' '}
-                {selectedLocationId ? (
-                  <button
-                    type="button"
-                    onClick={() => edit('locations', selectedLocationId)}
-                    className="font-semibold text-primary underline-offset-4 hover:underline bg-transparent border-none p-0 cursor-pointer"
-                  >
-                    Sửa ảnh của cung này →
-                  </button>
-                ) : (
-                  'Chọn cung ở trên để quản lý ảnh.'
-                )}
-              </div>
-
-              <hr className="border-border" />
-              <div className="flex justify-between items-center">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Lịch trình ngày ({dayFields.length})</p>
-                <Button type="button" variant="outline" size="sm" onClick={() => addDay({ day_number: dayFields.length + 1, title: '', title_en: '', content_md: '', content_md_en: '' })} className="border-dashed border-primary text-primary hover:text-primary">+ Thêm ngày</Button>
-              </div>
-              {dayFields.map((field, i) => (
-                <div key={field.id} className="border border-border rounded-lg p-3 flex flex-col gap-2">
-                  <div className="flex gap-2 items-center">
-                    <span className="font-bold text-sm min-w-[60px]">Ngày {i + 1}</span>
-                    <Input placeholder="Tiêu đề ngày (VI)" {...register(`itinerary_days.${i}.title`)} className="flex-1" />
-                    <Input placeholder="Tiêu đề ngày (EN)" {...register(`itinerary_days.${i}.title_en`)} className="flex-1" />
-                    <button type="button" onClick={() => removeDay(i)} className="text-destructive text-lg bg-transparent border-none cursor-pointer">×</button>
-                  </div>
-                  <div className="grid gap-2 md:grid-cols-2">
-                    <Textarea placeholder="Nội dung VI (Markdown)" {...register(`itinerary_days.${i}.content_md`)} rows={4} className="font-mono" />
-                    <Textarea placeholder="Nội dung EN (Markdown)" {...register(`itinerary_days.${i}.content_md_en`)} rows={4} className="font-mono" />
-                  </div>
+              <div className="flex flex-col gap-3 rounded-lg border border-dashed border-border bg-muted/30 px-4 py-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-muted-foreground">
+                    Ảnh và lịch trình theo ngày lấy theo{' '}
+                    <strong className="font-semibold text-foreground">Cung</strong>
+                    {route ? ` — ${route.name}` : ''}.
+                  </span>
+                  {selectedLocationId ? (
+                    <button
+                      type="button"
+                      onClick={() => edit('locations', selectedLocationId)}
+                      className="font-semibold text-primary underline-offset-4 hover:underline bg-transparent border-none p-0 cursor-pointer"
+                    >
+                      Sửa thông tin cung này →
+                    </button>
+                  ) : (
+                    <span className="text-muted-foreground">Chọn cung ở trên để xem.</span>
+                  )}
                 </div>
-              ))}
+
+                {selectedLocationId ? (
+                  <div className="flex flex-col gap-2">
+                    <p className={routeImageCount === 0 ? 'text-xs font-medium text-destructive' : 'text-xs text-muted-foreground'}>
+                      {routeImageCount === 0
+                        ? 'Cung này chưa có ảnh nào — trang booking sẽ không có thư viện ảnh.'
+                        : `${routeImageCount} ảnh trong thư viện của cung.`}
+                    </p>
+                    {routeDays.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">Cung này chưa có lịch trình theo ngày.</p>
+                    ) : (
+                      <ol className="flex flex-col gap-1 text-xs text-muted-foreground">
+                        {routeDays.map((d, i) => (
+                          <li key={d.id}>
+                            <span className="font-semibold text-foreground">Ngày {i + 1}</span>
+                            {d.title ? ` — ${d.title}` : ''}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </div>
+                ) : null}
+              </div>
 
               <div className="flex gap-3 mt-2">
                 <Button type="submit" disabled={formLoading}>{formLoading ? <><Spinner /> Đang lưu…</> : 'Lưu'}</Button>

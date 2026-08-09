@@ -18,20 +18,35 @@ export function ImageUpload({ prefix, currentPath, currentUrl, onUploaded, accep
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(resolveMediaUrl(currentPath, currentUrl));
+  // Local preview of a file the user just picked, shown until the page is left.
+  // Everything else is derived from the props on every render: seeding state
+  // from them instead would freeze the preview at whatever the form held on
+  // first paint, which for an edit form is nothing — the record arrives later.
+  const [pickedPreview, setPickedPreview] = useState<string | null>(null);
+  const pickedPreviewRef = useRef<string | null>(null);
+  const previewUrl = pickedPreview ?? resolveMediaUrl(currentPath, currentUrl);
+
+  // Revoking through a ref rather than inside the state updater: React calls
+  // updaters twice in StrictMode, and freeing a URL is not something to repeat.
+  function replacePickedPreview(next: string | null) {
+    if (pickedPreviewRef.current) URL.revokeObjectURL(pickedPreviewRef.current);
+    pickedPreviewRef.current = next;
+    setPickedPreview(next);
+  }
 
   async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
     setUploading(true);
-    setPreviewUrl(URL.createObjectURL(file));
+    replacePickedPreview(URL.createObjectURL(file));
     try {
       const key = await uploadMedia(file, prefix);
       onUploaded(key);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload thất bại');
-      setPreviewUrl(resolveMediaUrl(currentPath, currentUrl));
+      // Drop back to whatever is stored on the record.
+      replacePickedPreview(null);
     } finally {
       setUploading(false);
     }
