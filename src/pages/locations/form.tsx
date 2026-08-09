@@ -171,7 +171,6 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
               onUploaded={key => setValue('image_path', key)}
               label="Ảnh đại diện"
               field={register('image_path')}
-              socialPreview
             />
             <Field label="Hoặc dùng URL ảnh ngoài">
               <Input type="url" {...register('image_url')} placeholder="https://..." />
