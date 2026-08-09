@@ -97,8 +97,6 @@ function Field({ label, error, children }: { label: string; error?: string; chil
   );
 }
 
-const selectCls = "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
-
 export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
   const { list, edit } = useNavigation();
   const { query: locationsQuery } = useList<RouteDefaults>({
@@ -114,15 +112,17 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
     formState: { errors },
   } = useForm<TourFormData>({ refineCoreProps: { resource: 'tours' } });
 
-  const selectedLocationId = watch('location_id');
-  const route = routes.find(r => r.id === Number(selectedLocationId));
+  // An unpicked <select> reads back as NaN through valueAsNumber, so normalise
+  // once here — everything below gates on this rather than on the raw value.
+  const routeId = Number(watch('location_id')) || 0;
+  const route = routes.find(r => r.id === routeId);
 
   // Read-only look at what the route contributes, so the tour can be reviewed
   // whole before saving without any of it being copied in.
-  const routeFilter = selectedLocationId
-    ? [{ field: 'location_id', operator: 'eq' as const, value: Number(selectedLocationId) }]
+  const routeFilter = routeId
+    ? [{ field: 'location_id', operator: 'eq' as const, value: routeId }]
     : [];
-  const enabled = { enabled: Boolean(selectedLocationId) };
+  const enabled = { enabled: routeId > 0 };
   const { query: daysQuery } = useList<{ id: number; day_number: number; title: string }>({
     resource: 'location_itinerary_days',
     filters: routeFilter,
@@ -259,6 +259,32 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
           <CardContent className="pt-6">
             <form onSubmit={handleSubmit(handleSubmitTour as never)} className="flex flex-col gap-5">
 
+              {/* The route decides what the rest of this form is even about —
+                  title, price, capacity and every block of copy default from
+                  it — so it is picked first and alone. */}
+              <div className="flex flex-col gap-2 rounded-xl border-2 border-primary/30 bg-primary/5 p-4">
+                <Label className="text-base font-bold">Cung *</Label>
+                <p className="text-xs text-muted-foreground">
+                  Chọn cung trước. Tên tour, giá, số khách và toàn bộ nội dung bên dưới
+                  lấy mặc định từ cung.
+                </p>
+                <select
+                  {...register('location_id', { required: true, valueAsNumber: true })}
+                  className="flex h-12 w-full rounded-md border border-input bg-background px-3 text-base font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  <option value="">— Chọn cung —</option>
+                  {routes.map((l) => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {!routeId ? (
+                <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+                  Chọn cung ở trên để bắt đầu tạo tour.
+                </div>
+              ) : (
+              <>
               <BilingualField
                 label="Tiêu đề *"
                 error={errors.title?.message as string}
@@ -268,14 +294,6 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
               />
 
               <div className="grid grid-cols-2 gap-4">
-                <Field label="Location *">
-                  <select {...register('location_id', { required: true, valueAsNumber: true })} className={selectCls}>
-                    <option value="">Chọn location…</option>
-                    {routes.map((l) => (
-                      <option key={l.id} value={l.id}>{l.name}</option>
-                    ))}
-                  </select>
-                </Field>
                 <Field label="Số khách tối đa *">
                   <Input type="number" {...register('max_guests', { required: true, valueAsNumber: true })} />
                 </Field>
@@ -311,44 +329,40 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
                     <strong className="font-semibold text-foreground">Cung</strong>
                     {route ? ` — ${route.name}` : ''}.
                   </span>
-                  {selectedLocationId ? (
-                    <button
-                      type="button"
-                      onClick={() => edit('locations', selectedLocationId)}
-                      className="font-semibold text-primary underline-offset-4 hover:underline bg-transparent border-none p-0 cursor-pointer"
-                    >
-                      Sửa thông tin cung này →
-                    </button>
-                  ) : (
-                    <span className="text-muted-foreground">Chọn cung ở trên để xem.</span>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => edit('locations', routeId)}
+                    className="font-semibold text-primary underline-offset-4 hover:underline bg-transparent border-none p-0 cursor-pointer"
+                  >
+                    Sửa thông tin cung này →
+                  </button>
                 </div>
 
-                {selectedLocationId ? (
-                  <div className="flex flex-col gap-2">
-                    <p className={routeImageCount === 0 ? 'text-xs font-medium text-destructive' : 'text-xs text-muted-foreground'}>
-                      {routeImageCount === 0
-                        ? 'Cung này chưa có ảnh nào — trang booking sẽ không có thư viện ảnh.'
-                        : `${routeImageCount} ảnh trong thư viện của cung.`}
-                    </p>
-                    {routeDays.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">Cung này chưa có lịch trình theo ngày.</p>
-                    ) : (
-                      <ol className="flex flex-col gap-1 text-xs text-muted-foreground">
-                        {routeDays.map((d, i) => (
-                          <li key={d.id}>
-                            <span className="font-semibold text-foreground">Ngày {i + 1}</span>
-                            {d.title ? ` — ${d.title}` : ''}
-                          </li>
-                        ))}
-                      </ol>
-                    )}
-                  </div>
-                ) : null}
+                <div className="flex flex-col gap-2">
+                  <p className={routeImageCount === 0 ? 'text-xs font-medium text-destructive' : 'text-xs text-muted-foreground'}>
+                    {routeImageCount === 0
+                      ? 'Cung này chưa có ảnh nào — trang booking sẽ không có thư viện ảnh.'
+                      : `${routeImageCount} ảnh trong thư viện của cung.`}
+                  </p>
+                  {routeDays.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Cung này chưa có lịch trình theo ngày.</p>
+                  ) : (
+                    <ol className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      {routeDays.map((d, i) => (
+                        <li key={d.id}>
+                          <span className="font-semibold text-foreground">Ngày {i + 1}</span>
+                          {d.title ? ` — ${d.title}` : ''}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
               </div>
+              </>
+              )}
 
               <div className="flex gap-3 mt-2">
-                <Button type="submit" disabled={formLoading}>{formLoading ? <><Spinner /> Đang lưu…</> : 'Lưu'}</Button>
+                <Button type="submit" disabled={formLoading || !routeId}>{formLoading ? <><Spinner /> Đang lưu…</> : 'Lưu'}</Button>
                 <Button type="button" variant="outline" onClick={() => list('tours')}>Hủy</Button>
               </div>
             </form>
