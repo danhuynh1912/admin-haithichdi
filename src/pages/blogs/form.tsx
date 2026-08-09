@@ -289,6 +289,7 @@ export function BlogForm({ mode }: { mode: 'create' | 'edit' }) {
                 onUploaded={key => setValue('hero_path', key)}
                 label="Ảnh hero"
                 field={register('hero_path')}
+                socialPreview
               />
               <Field label="Hoặc URL ảnh ngoài">
                 <Input type="url" {...register('hero_url')} placeholder="https://..." />

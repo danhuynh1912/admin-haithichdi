@@ -23,9 +23,11 @@ interface Props {
    * input below is what makes it a real field.
    */
   field?: React.ComponentProps<'input'>;
+  /** Stored as JPEG so a link-preview crawler can decode it. See UploadOptions. */
+  socialPreview?: boolean;
 }
 
-export function ImageUpload({ prefix, currentPath, currentUrl, onUploaded, accept = 'image/*', label = 'Ảnh', field }: Props) {
+export function ImageUpload({ prefix, currentPath, currentUrl, onUploaded, accept = 'image/*', label = 'Ảnh', field, socialPreview = false }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +54,7 @@ export function ImageUpload({ prefix, currentPath, currentUrl, onUploaded, accep
     setUploading(true);
     replacePickedPreview(URL.createObjectURL(file));
     try {
-      const key = await uploadMedia(file, prefix);
+      const key = await uploadMedia(file, prefix, { socialPreview });
       onUploaded(key);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload thất bại');

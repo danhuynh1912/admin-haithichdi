@@ -14,15 +14,18 @@ const WEBP_QUALITY = 0.82;
 /** JPEG needs a little more to hold the same detail as WebP at 0.82. */
 const JPEG_QUALITY = 0.86;
 
-/**
- * Prefixes whose images end up as an `og:image`, so they are fetched by a
- * link-preview crawler rather than by a browser.
- *
- * Facebook and Messenger do not render a WebP preview — the card comes back
- * with no picture at all — so these are re-encoded as JPEG. They still get the
- * resize and the recompression, just not the format.
- */
-const SOCIAL_PREVIEW_PREFIXES: readonly MediaPrefix[] = ['blog/heroes', 'locations/images'];
+export interface UploadOptions {
+  /**
+   * This image will be used as an `og:image`, so a link-preview crawler has to
+   * be able to decode it — Facebook and Messenger render no picture at all for
+   * a WebP preview. Such images are stored as JPEG instead.
+   *
+   * Declared by the caller rather than guessed from the prefix: a route's cover
+   * photo and the photos in its gallery share a prefix but not a purpose, and
+   * only the cover is ever a preview image.
+   */
+  socialPreview?: boolean;
+}
 
 /**
  * Longest edge a canvas is allowed to reach. Safari refuses to rasterise past
@@ -50,11 +53,11 @@ const EXTENSION_BY_TYPE: Record<string, string> = {
  * failure also falls back to the original — an upload that works is worth more
  * than one that is smaller.
  */
-async function reencode(file: File, prefix: MediaPrefix): Promise<Blob> {
+async function reencode(file: File, socialPreview: boolean): Promise<Blob> {
   if (!file.type.startsWith('image/')) return file;
   if (file.type === 'image/gif') return file;
 
-  const target = SOCIAL_PREVIEW_PREFIXES.includes(prefix) ? 'image/jpeg' : 'image/webp';
+  const target = socialPreview ? 'image/jpeg' : 'image/webp';
   const quality = target === 'image/jpeg' ? JPEG_QUALITY : WEBP_QUALITY;
 
   try {
@@ -85,8 +88,12 @@ async function reencode(file: File, prefix: MediaPrefix): Promise<Blob> {
   }
 }
 
-export async function uploadMedia(file: File, prefix: MediaPrefix): Promise<string> {
-  const payload = await reencode(file, prefix);
+export async function uploadMedia(
+  file: File,
+  prefix: MediaPrefix,
+  options: UploadOptions = {},
+): Promise<string> {
+  const payload = await reencode(file, options.socialPreview ?? false);
   const contentType = payload.type || file.type;
 
   // The extension has to describe what is actually being stored, not what was
