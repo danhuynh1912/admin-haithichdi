@@ -11,6 +11,19 @@ export type MediaPrefix =
 /** Lossy but visually clean for photographs; well below JPEG at the same look. */
 const WEBP_QUALITY = 0.82;
 
+/** JPEG needs a little more to hold the same detail as WebP at 0.82. */
+const JPEG_QUALITY = 0.86;
+
+/**
+ * Prefixes whose images end up as an `og:image`, so they are fetched by a
+ * link-preview crawler rather than by a browser.
+ *
+ * Facebook and Messenger do not render a WebP preview — the card comes back
+ * with no picture at all — so these are re-encoded as JPEG. They still get the
+ * resize and the recompression, just not the format.
+ */
+const SOCIAL_PREVIEW_PREFIXES: readonly MediaPrefix[] = ['blog/heroes', 'locations/images'];
+
 /**
  * Longest edge a canvas is allowed to reach. Safari refuses to rasterise past
  * roughly 16.7M pixels and hands back a blank canvas rather than an error, so
@@ -28,17 +41,21 @@ const EXTENSION_BY_TYPE: Record<string, string> = {
 };
 
 /**
- * Re-encode an image as WebP in the browser, before it ever reaches S3.
+ * Re-encode and downscale an image in the browser, before it ever reaches S3.
+ * WebP normally, JPEG where the result has to survive a link-preview crawler.
  *
- * Passes the file straight through when converting would be wrong or pointless:
- * PDFs, files that are already WebP, animated GIFs (a canvas only ever captures
- * the first frame), and the rare case where WebP comes out larger than what was
- * picked. Any failure also falls back to the original — an upload that works is
- * worth more than one that is smaller.
+ * Passes the file straight through when re-encoding would be wrong or
+ * pointless: PDFs, animated GIFs (a canvas only ever captures the first frame),
+ * and the case where the result comes out larger than what was picked. Any
+ * failure also falls back to the original — an upload that works is worth more
+ * than one that is smaller.
  */
-async function toWebp(file: File): Promise<Blob> {
+async function reencode(file: File, prefix: MediaPrefix): Promise<Blob> {
   if (!file.type.startsWith('image/')) return file;
-  if (file.type === 'image/webp' || file.type === 'image/gif') return file;
+  if (file.type === 'image/gif') return file;
+
+  const target = SOCIAL_PREVIEW_PREFIXES.includes(prefix) ? 'image/jpeg' : 'image/webp';
+  const quality = target === 'image/jpeg' ? JPEG_QUALITY : WEBP_QUALITY;
 
   try {
     // `imageOrientation` matters: without it a phone photo carrying EXIF
@@ -55,20 +72,21 @@ async function toWebp(file: File): Promise<Blob> {
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close();
 
-    const webp = await new Promise<Blob | null>(resolve =>
-      canvas.toBlob(resolve, 'image/webp', WEBP_QUALITY),
+    const encoded = await new Promise<Blob | null>(resolve =>
+      canvas.toBlob(resolve, target, quality),
     );
 
-    // A browser without WebP encoding silently hands back a PNG instead.
-    if (!webp || webp.type !== 'image/webp') return file;
-    return webp.size < file.size ? webp : file;
+    // A browser that cannot encode the requested format silently hands back a
+    // PNG, which would be neither smaller nor what the key claims to hold.
+    if (!encoded || encoded.type !== target) return file;
+    return encoded.size < file.size ? encoded : file;
   } catch {
     return file;
   }
 }
 
 export async function uploadMedia(file: File, prefix: MediaPrefix): Promise<string> {
-  const payload = await toWebp(file);
+  const payload = await reencode(file, prefix);
   const contentType = payload.type || file.type;
 
   // The extension has to describe what is actually being stored, not what was
