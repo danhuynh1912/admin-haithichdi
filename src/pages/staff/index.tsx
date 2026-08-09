@@ -5,12 +5,12 @@ import { createColumnHelper, getCoreRowModel } from '@tanstack/react-table';
 import { DataTable } from '@/components/DataTable';
 import { resolveMediaUrl } from '@/lib/supabase';
 import { emailToUsername } from '@/lib/username';
-import { deleteLeader } from '@/lib/adminApi';
+import { deleteStaff } from '@/lib/adminApi';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 
-interface Leader {
+interface StaffAccount {
   id: string;
   email: string;
   full_name: string;
@@ -23,23 +23,23 @@ interface Leader {
   last_sign_in_at: string | null;
 }
 
-const col = createColumnHelper<Leader>();
+const col = createColumnHelper<StaffAccount>();
 
 const SELECT = 'id,email,full_name,role,display_role,is_active,avatar_path,avatar_url,years_experience,last_sign_in_at';
 
-export function LeaderList() {
+export function StaffList() {
   const { edit, create } = useNavigation();
   const invalidate = useInvalidate();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function onDelete(row: Leader) {
+  async function onDelete(row: StaffAccount) {
     if (!confirm(`Xoá tài khoản "${row.full_name}" (${emailToUsername(row.email)})?\nHành động này không thể hoàn tác.`)) return;
     setBusyId(row.id);
     setError(null);
     try {
-      await deleteLeader(row.id);
-      await invalidate({ resource: 'leaders_admin', invalidates: ['list'] });
+      await deleteStaff(row.id);
+      await invalidate({ resource: 'staff_admin', invalidates: ['list'] });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -60,7 +60,14 @@ export function LeaderList() {
     }),
     col.accessor('full_name', { header: 'Họ tên' }),
     col.accessor('email', { header: 'Tên đăng nhập', cell: i => emailToUsername(i.getValue()) }),
-    col.accessor('role', { header: 'Role', size: 80 }),
+    col.accessor('role', {
+      header: 'Role', size: 90,
+      cell: i => (
+        <Badge variant={i.getValue() === 'admin' ? 'default' : 'secondary'}>
+          {i.getValue() === 'admin' ? 'Admin' : 'Sale'}
+        </Badge>
+      ),
+    }),
     col.accessor('display_role', { header: 'Chức danh' }),
     col.accessor('years_experience', { header: 'Kinh nghiệm', size: 110, cell: i => `${i.getValue() ?? 0} năm` }),
     col.accessor('last_sign_in_at', {
@@ -87,17 +94,17 @@ export function LeaderList() {
     }),
   ];
 
-  const table = useTable<Leader>({
+  const table = useTable<StaffAccount>({
     columns,
-    refineCoreProps: { resource: 'leaders_admin', meta: { select: SELECT } },
+    refineCoreProps: { resource: 'staff_admin', meta: { select: SELECT } },
     getCoreRowModel: getCoreRowModel(),
   });
 
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-5">
-        <h2 className="text-xl font-bold">👤 Leaders</h2>
-        <Button onClick={() => create('profiles')}>+ Thêm Leader</Button>
+        <h2 className="text-xl font-bold">👤 Tài khoản</h2>
+        <Button onClick={() => create('profiles')}>+ Thêm tài khoản</Button>
       </div>
 
       {error && (
@@ -106,7 +113,7 @@ export function LeaderList() {
         </div>
       )}
 
-      <DataTable table={table} emptyText="Chưa có leader nào. Bấm “+ Thêm Leader” để tạo tài khoản đầu tiên." />
+      <DataTable table={table} emptyText="Chưa có tài khoản nào. Bấm “+ Thêm tài khoản” để tạo tài khoản đầu tiên." />
     </div>
   );
 }

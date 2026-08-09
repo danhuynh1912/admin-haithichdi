@@ -7,7 +7,7 @@
  * email_confirm: true, so nothing is ever sent there.
  *
  * Consequence: no self-service password reset. Passwords are reset by an admin
- * from the Leaders page, which matches how this panel already works.
+ * from the accounts page, which matches how this panel already works.
  *
  * The same constant is duplicated in supabase/functions/admin-users/index.ts —
  * keep the two in sync.

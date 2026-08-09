@@ -19,7 +19,7 @@ const badgeVariants = cva(
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",
-        // Not in the preset — status badges for tours, leaders and bookings.
+        // Not in the preset — status badges for tours, staff and bookings.
         // Tonal like `destructive` so the row stays readable at a glance.
         success:
           "bg-emerald-600/10 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",

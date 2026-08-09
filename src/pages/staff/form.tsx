@@ -4,7 +4,7 @@ import { useForm } from '@refinedev/react-hook-form';
 import { useNavigation, useOne } from '@refinedev/core';
 import { useController } from 'react-hook-form';
 import { ImageUpload } from '@/components/ImageUpload';
-import { createLeader, updateLeaderCredentials, randomPassword } from '@/lib/adminApi';
+import { createStaff, updateStaffCredentials, randomPassword } from '@/lib/adminApi';
 import { emailToUsername, USERNAME_PATTERN } from '@/lib/username';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { BilingualField, EN_PLACEHOLDER } from '@/components/BilingualField';
 
-interface LeaderFormData {
+interface StaffFormData {
   username: string; password: string;
   full_name: string; display_role: string; bio: string; highlight: string;
   location: string; relationship_status: string; date_of_birth: string;
@@ -39,7 +39,7 @@ function Field({ label, error, hint, children }: { label: string; error?: string
 const selectCls = "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 /** Strip form-only fields and normalise empties the DB can't take. */
-function toProfilePayload(v: LeaderFormData) {
+function toProfilePayload(v: StaffFormData) {
   const { username: _u, password: _p, ...profile } = v;
   return {
     ...profile,
@@ -50,7 +50,7 @@ function toProfilePayload(v: LeaderFormData) {
   };
 }
 
-export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
+export function StaffForm({ mode }: { mode: 'create' | 'edit' }) {
   const { list } = useNavigation();
   const { id } = useParams<{ id: string }>();
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -60,11 +60,11 @@ export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
     register, handleSubmit, control, watch, setValue,
     refineCore: { onFinish, formLoading },
     formState: { errors },
-  } = useForm<LeaderFormData>({
+  } = useForm<StaffFormData>({
     refineCoreProps: mode === 'edit'
       ? { resource: 'profiles', action: 'edit', id, redirect: false }
       : { resource: 'profiles', action: 'create' },
-    defaultValues: { role: 'leader', is_active: true, years_experience: 0, strengths: [] },
+    defaultValues: { role: 'sale', is_active: true, years_experience: 0, strengths: [] },
   });
 
   const avatarPath = watch('avatar_path');
@@ -76,7 +76,7 @@ export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
   const strengthsEnStr = (strengthsEnField.value ?? []).join('\n');
 
   async function onSubmit(raw: Record<string, unknown>) {
-    const values = raw as unknown as LeaderFormData;
+    const values = raw as unknown as StaffFormData;
     setSubmitError(null);
     if (mode === 'edit') {
       await onFinish(toProfilePayload(values));
@@ -85,7 +85,7 @@ export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
     }
     setSubmitting(true);
     try {
-      await createLeader(values.username, values.password, toProfilePayload(values));
+      await createStaff(values.username, values.password, toProfilePayload(values));
       list('profiles');
     } catch (e) {
       setSubmitError((e as Error).message);
@@ -100,7 +100,7 @@ export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
     <div className="p-6 max-w-2xl">
       <div className="flex items-center gap-3 mb-6">
         <Button variant="ghost" size="sm" onClick={() => list('profiles')}>← Quay lại</Button>
-        <h2 className="text-xl font-bold">{mode === 'create' ? 'Thêm Leader' : 'Sửa Leader'}</h2>
+        <h2 className="text-xl font-bold">{mode === 'create' ? 'Thêm tài khoản' : 'Sửa tài khoản'}</h2>
       </div>
 
       {submitError && (
@@ -139,7 +139,7 @@ export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
                 <Field
                   label="Mật khẩu *"
                   error={errors.password?.message as string}
-                  hint="Tối thiểu 8 ký tự. Gửi lại cho leader sau khi tạo — mật khẩu không xem lại được."
+                  hint="Tối thiểu 8 ký tự. Gửi lại cho admin sau khi tạo — mật khẩu không xem lại được."
                 >
                   <div className="flex gap-2">
                     <Input
@@ -164,14 +164,14 @@ export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
             </Field>
 
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Role">
+              <Field label="Role" hint="Sale chỉ xác nhận được booking. Admin toàn quyền.">
                 <select {...register('role')} className={selectCls}>
-                  <option value="leader">Leader</option>
+                  <option value="sale">Sale</option>
                   <option value="admin">Admin</option>
                 </select>
               </Field>
               <Field label="Chức danh hiển thị (VI)">
-                <Input {...register('display_role')} placeholder="Trek Leader" />
+                <Input {...register('display_role')} placeholder="Chăm sóc khách hàng" />
               </Field>
               <Field label="Chức danh hiển thị (EN)">
                 <Input {...register('display_role_en')} placeholder={EN_PLACEHOLDER} />
@@ -225,7 +225,7 @@ export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
                   value={strengthsEnStr}
                   onChange={e => strengthsEnField.onChange(e.target.value.split('\n').map(s => s.trim()).filter(Boolean))}
                   rows={4}
-                  placeholder={"Endurance\nGroup leadership\nProblem solving"}
+                  placeholder={"Careful listener\nFast responder\nProblem solving"}
                 />
               }
             />
@@ -233,7 +233,7 @@ export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
             <Field label="Active">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" {...register('is_active')} className="w-4 h-4 accent-primary" />
-                <span className="text-sm">Hiện trên trang About</span>
+                <span className="text-sm">Cho phép đăng nhập</span>
               </label>
             </Field>
 
@@ -254,7 +254,7 @@ export function LeaderForm({ mode }: { mode: 'create' | 'edit' }) {
 /** Separate card: changing email/password goes through the edge function, not the table. */
 function CredentialsCard({ id }: { id: string }) {
   const { result } = useOne<{ id: string; email: string }>({
-    resource: 'leaders_admin', id, meta: { select: 'id,email' },
+    resource: 'staff_admin', id, meta: { select: 'id,email' },
   });
   const currentUsername = emailToUsername(result?.email);
 
@@ -279,7 +279,7 @@ function CredentialsCard({ id }: { id: string }) {
     }
     setState({ busy: true });
     try {
-      await updateLeaderCredentials(id, patch);
+      await updateStaffCredentials(id, patch);
       setPassword('');
       setState({ busy: false, ok: 'Đã cập nhật tài khoản đăng nhập' });
     } catch (e) {

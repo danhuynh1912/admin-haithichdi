@@ -3,9 +3,10 @@ import { useTable } from '@refinedev/react-table';
 import { useList, useUpdate, type CrudFilter } from '@refinedev/core';
 import { createColumnHelper, getCoreRowModel } from '@tanstack/react-table';
 import { DataTable } from '@/components/DataTable';
-import { Badge } from '@/components/ui/badge';
+import { Badge, badgeVariants } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
 
 interface Booking {
   id: number;
@@ -92,13 +93,19 @@ export function BookingList() {
     }),
     col.accessor('status', {
       header: 'Trạng thái',
+      // The badge *is* the control: a native select wearing the badge's own
+      // tonal styling, so the row reads at a glance and still edits in place
+      // without a second column repeating the same value.
       cell: info => {
         const id = info.row.original.id;
         return (
           <select
             value={info.getValue()}
             onChange={e => update({ resource: 'bookings', id, values: { status: e.target.value } })}
-            className={selectCls}
+            className={cn(
+              badgeVariants({ variant: statusVariant(info.getValue()) }),
+              'h-8 cursor-pointer appearance-none rounded-full px-3.5 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+            )}
           >
             {Object.entries(STATUS_LABEL).map(([val, label]) => (
               <option key={val} value={val}>{label}</option>

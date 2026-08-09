@@ -6,7 +6,7 @@ import { supabase } from './supabase';
  */
 const FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-users`;
 
-export interface LeaderProfileInput {
+export interface StaffProfileInput {
   role?: string;
   full_name?: string;
   avatar_path?: string | null;
@@ -37,15 +37,15 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
   return json as T;
 }
 
-export function createLeader(username: string, password: string, profile: LeaderProfileInput) {
+export function createStaff(username: string, password: string, profile: StaffProfileInput) {
   return call<{ id: string }>({ action: 'create', username, password, profile });
 }
 
-export function updateLeaderCredentials(id: string, patch: { username?: string; password?: string }) {
+export function updateStaffCredentials(id: string, patch: { username?: string; password?: string }) {
   return call<{ id: string }>({ action: 'update_credentials', id, ...patch });
 }
 
-export function deleteLeader(id: string) {
+export function deleteStaff(id: string) {
   return call<{ id: string }>({ action: 'delete', id });
 }
 
