@@ -170,6 +170,7 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
               currentUrl={imageUrl}
               onUploaded={key => setValue('image_path', key)}
               label="Ảnh đại diện"
+              field={register('image_path')}
             />
             <Field label="Hoặc dùng URL ảnh ngoài">
               <Input type="url" {...register('image_url')} placeholder="https://..." />
@@ -202,6 +203,7 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
                   currentPath={imageValues[i]?.image_path}
                   currentUrl={imageValues[i]?.image_url}
                   onUploaded={key => setValue(`images.${i}.image_path`, key)}
+                  field={register(`images.${i}.image_path`)}
                 />
                 <div className="flex-1 flex flex-col gap-2">
                   <Input placeholder="Hoặc URL ngoài" {...register(`images.${i}.image_url`)} />
@@ -315,6 +317,7 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
                 onUploaded={key => setValue('quotation_path', key)}
                 accept="application/pdf"
                 label="Upload PDF"
+                field={register('quotation_path')}
               />
             </Field>
 

@@ -44,6 +44,23 @@ function Field({ label, error, hint, children }: { label: string; error?: string
 
 const selectCls = "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
+/**
+ * Today as the `yyyy-mm-dd` an <input type="date"> expects, read from local
+ * time. `toISOString()` would be UTC, which in Vietnam dates anything published
+ * before 07:00 to the previous day.
+ */
+function todayLocal(): string {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+function formatDate(value: string | undefined): string {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.valueOf()) ? value : parsed.toLocaleDateString('vi-VN');
+}
+
 export function BlogForm({ mode }: { mode: 'create' | 'edit' }) {
   const { list } = useNavigation();
   // Read from the route rather than from useForm's own result — refineCoreProps
@@ -76,8 +93,11 @@ export function BlogForm({ mode }: { mode: 'create' | 'edit' }) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const [editingDate, setEditingDate] = useState(false);
+
   const status = watch('status');
   const slug = watch('slug');
+  const publishedAt = watch('published_at');
   const heroPath = watch('hero_path');
   const heroUrl = watch('hero_url');
 
@@ -102,6 +122,12 @@ export function BlogForm({ mode }: { mode: 'create' | 'edit' }) {
     if (mode !== 'create' || slugTouched.current) return;
     setValue('slug', slugifyTitle(title ?? ''));
   }, [title, mode, setValue]);
+
+  // The database rejects a published post with no date, so fill it in at the
+  // moment of publishing instead of letting the author walk into the error.
+  useEffect(() => {
+    if (status === 'published' && !publishedAt) setValue('published_at', todayLocal());
+  }, [status, publishedAt, setValue]);
 
   function toggleTag(tagId: number) {
     setSelectedTagIds(prev =>
@@ -224,12 +250,27 @@ export function BlogForm({ mode }: { mode: 'create' | 'edit' }) {
                     <option value="published">Đã đăng</option>
                   </select>
                 </Field>
-                <Field
-                  label="Ngày đăng"
-                  hint="Bắt buộc khi chuyển sang Đã đăng. Cũng là thứ tự sắp xếp ở trang blog."
-                >
-                  <Input type="date" {...register('published_at')} />
-                </Field>
+                {/* A draft has no publish date yet, and a published post is
+                    almost always published today — so it is filled in rather
+                    than asked for, and only surfaced to be corrected. */}
+                {status === 'published' && (
+                  <Field label="Ngày đăng" hint="Cũng là thứ tự sắp xếp ở trang blog.">
+                    {editingDate ? (
+                      <Input type="date" autoFocus {...register('published_at')} />
+                    ) : (
+                      <div className="flex items-center gap-3 pt-2">
+                        <span className="text-sm">{formatDate(publishedAt)}</span>
+                        <button
+                          type="button"
+                          onClick={() => setEditingDate(true)}
+                          className="text-sm font-semibold text-primary underline-offset-4 hover:underline bg-transparent border-none p-0 cursor-pointer"
+                        >
+                          Đổi
+                        </button>
+                      </div>
+                    )}
+                  </Field>
+                )}
               </div>
 
               <BilingualField
@@ -247,6 +288,7 @@ export function BlogForm({ mode }: { mode: 'create' | 'edit' }) {
                 currentUrl={heroUrl}
                 onUploaded={key => setValue('hero_path', key)}
                 label="Ảnh hero"
+                field={register('hero_path')}
               />
               <Field label="Hoặc URL ảnh ngoài">
                 <Input type="url" {...register('hero_url')} placeholder="https://..." />

@@ -12,9 +12,20 @@ interface Props {
   onUploaded: (key: string) => void;
   accept?: string;
   label?: string;
+  /**
+   * Spread `register('the_path_column')` here on any form backed by
+   * `@refinedev/react-hook-form`.
+   *
+   * That adapter does not `reset()` the form with the fetched record — it only
+   * pushes values into fields that are registered. A `*_path` column written
+   * solely through `setValue` is therefore never registered, so the stored key
+   * never comes back on an edit screen and the preview stays empty. The hidden
+   * input below is what makes it a real field.
+   */
+  field?: React.ComponentProps<'input'>;
 }
 
-export function ImageUpload({ prefix, currentPath, currentUrl, onUploaded, accept = 'image/*', label = 'Ảnh' }: Props) {
+export function ImageUpload({ prefix, currentPath, currentUrl, onUploaded, accept = 'image/*', label = 'Ảnh', field }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +73,7 @@ export function ImageUpload({ prefix, currentPath, currentUrl, onUploaded, accep
         {uploading ? <><Spinner /> Đang upload…</> : 'Chọn file'}
       </Button>
       <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={handleChange} />
+      {field ? <input type="hidden" {...field} /> : null}
       {error && <span className="text-xs text-destructive">{error}</span>}
     </div>
   );

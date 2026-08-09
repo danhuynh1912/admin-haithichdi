@@ -154,7 +154,7 @@ export function StaffForm({ mode }: { mode: 'create' | 'edit' }) {
               </div>
             )}
 
-            <ImageUpload prefix="profiles/avatars" currentPath={avatarPath} currentUrl={avatarUrl} onUploaded={key => setValue('avatar_path', key)} label="Avatar" />
+            <ImageUpload prefix="profiles/avatars" currentPath={avatarPath} currentUrl={avatarUrl} onUploaded={key => setValue('avatar_path', key)} label="Avatar" field={register('avatar_path')} />
             <Field label="Hoặc URL avatar ngoài">
               <Input type="url" {...register('avatar_url')} placeholder="https://..." />
             </Field>
