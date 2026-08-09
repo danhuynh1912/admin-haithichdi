@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useForm } from '@refinedev/react-hook-form';
 import { useList, useNavigation } from '@refinedev/core';
 import { useFieldArray } from 'react-hook-form';
-import { ImageUpload } from '@/components/ImageUpload';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -11,14 +10,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { BilingualField, EN_PLACEHOLDER } from '@/components/BilingualField';
-interface TourImage { id?: number; image_path: string; image_url: string; caption: string; caption_en: string; sort_order: number; }
 interface ItineraryDay { id?: number; day_number: number; title: string; title_en: string; content_md: string; content_md_en: string; }
 interface TourFormData {
   title: string; summary: string; description_md: string; itinerary_md: string;
   title_en: string; summary_en: string; description_md_en: string; itinerary_md_en: string;
   start_date: string; end_date: string; price: string; location_id: number;
   max_guests: number; is_active: boolean;
-  images: TourImage[]; itinerary_days: ItineraryDay[];
+  itinerary_days: ItineraryDay[];
 }
 
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
@@ -34,7 +32,7 @@ function Field({ label, error, children }: { label: string; error?: string; chil
 const selectCls = "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
-  const { list } = useNavigation();
+  const { list, edit } = useNavigation();
   const { query: locationsQuery } = useList({ resource: 'locations', pagination: { pageSize: 100 } });
 
   const {
@@ -43,37 +41,27 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
     formState: { errors },
   } = useForm<TourFormData>({ refineCoreProps: { resource: 'tours' } });
 
-  const { fields: imgFields, append: addImg, remove: removeImg } = useFieldArray({ control, name: 'images' });
   const { fields: dayFields, append: addDay, remove: removeDay } = useFieldArray({ control, name: 'itinerary_days' });
+
+  const selectedLocationId = watch('location_id');
 
   const [loadingRelated, setLoadingRelated] = useState(mode === 'edit');
   useEffect(() => {
     if (mode !== 'edit' || !id) return;
     (async () => {
-      const [{ data: imgs }, { data: days }] = await Promise.all([
-        supabase.from('tour_images').select('*').eq('tour_id', id).order('sort_order'),
-        supabase.from('tour_itinerary_days').select('*').eq('tour_id', id).order('day_number'),
-      ]);
-      if (imgs?.length) setValue('images', imgs as TourImage[]);
+      const { data: days } = await supabase
+        .from('tour_itinerary_days').select('*').eq('tour_id', id).order('day_number');
       if (days?.length) setValue('itinerary_days', days as ItineraryDay[]);
       setLoadingRelated(false);
     })();
   }, [id, mode, setValue]);
 
-  const imageValues = watch('images') ?? [];
-
   async function handleSubmitWithRelated(data: TourFormData) {
-    const { images, itinerary_days, ...tourData } = data;
+    const { itinerary_days, ...tourData } = data;
     const result = await onFinish(tourData) as { data?: { id: number } } | undefined;
     const tourId = (result?.data?.id ?? id) as number;
     if (!tourId) return;
 
-    if (images?.length) {
-      await supabase.from('tour_images').delete().eq('tour_id', tourId);
-      await supabase.from('tour_images').insert(
-        images.map(({ id: _id, ...img }, i) => ({ ...img, tour_id: tourId, sort_order: i }))
-      );
-    }
     if (itinerary_days?.length) {
       await supabase.from('tour_itinerary_days').delete().eq('tour_id', tourId);
       await supabase.from('tour_itinerary_days').insert(
@@ -151,29 +139,23 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
                 en={<Textarea {...register('itinerary_md_en')} rows={5} className="font-mono" placeholder={EN_PLACEHOLDER} />}
               />
 
+              {/* The gallery lives on the location now — every tour up the
+                  same route shares it, so it is uploaded once over there. */}
               <hr className="border-border" />
-              <div className="flex justify-between items-center">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ảnh tour ({imgFields.length})</p>
-                <Button type="button" variant="outline" size="sm" onClick={() => addImg({ image_path: '', image_url: '', caption: '', caption_en: '', sort_order: imgFields.length })} className="border-dashed border-primary text-primary hover:text-primary">+ Thêm ảnh</Button>
+              <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                Ảnh của tour lấy theo <strong className="font-semibold text-foreground">Cung</strong>.{' '}
+                {selectedLocationId ? (
+                  <button
+                    type="button"
+                    onClick={() => edit('locations', selectedLocationId)}
+                    className="font-semibold text-primary underline-offset-4 hover:underline bg-transparent border-none p-0 cursor-pointer"
+                  >
+                    Sửa ảnh của cung này →
+                  </button>
+                ) : (
+                  'Chọn cung ở trên để quản lý ảnh.'
+                )}
               </div>
-              {imgFields.map((field, i) => (
-                <div key={field.id} className="border border-border rounded-lg p-3 flex gap-3 items-start">
-                  <ImageUpload
-                    prefix="tours/images"
-                    currentPath={imageValues[i]?.image_path}
-                    currentUrl={imageValues[i]?.image_url}
-                    onUploaded={key => setValue(`images.${i}.image_path`, key)}
-                  />
-                  <div className="flex-1 flex flex-col gap-2">
-                    <Input placeholder="Hoặc URL ngoài" {...register(`images.${i}.image_url`)} />
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input placeholder="Caption (VI)" {...register(`images.${i}.caption`)} />
-                      <Input placeholder="Caption (EN)" {...register(`images.${i}.caption_en`)} />
-                    </div>
-                  </div>
-                  <button type="button" onClick={() => removeImg(i)} className="text-destructive text-lg p-1 bg-transparent border-none cursor-pointer">×</button>
-                </div>
-              ))}
 
               <hr className="border-border" />
               <div className="flex justify-between items-center">

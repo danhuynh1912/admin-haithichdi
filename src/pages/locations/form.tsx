@@ -1,6 +1,9 @@
+import { useEffect, useState } from 'react';
 import { useForm } from '@refinedev/react-hook-form';
 import { useNavigation } from '@refinedev/core';
+import { useFieldArray } from 'react-hook-form';
 import { ImageUpload } from '@/components/ImageUpload';
+import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { Input } from '@/components/ui/input';
@@ -9,7 +12,18 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { BilingualField, EN_PLACEHOLDER } from '@/components/BilingualField';
 
+/** One photo in the route's gallery — shared by every tour up that route. */
+interface LocationImage {
+  id?: number;
+  image_path: string;
+  image_url: string;
+  caption: string;
+  caption_en: string;
+  sort_order: number;
+}
+
 interface LocationFormData {
+  images: LocationImage[];
   name: string;
   elevation_m: number;
   image_path: string;
@@ -41,15 +55,52 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
   const {
     register,
     handleSubmit,
+    control,
     setValue,
     watch,
-    refineCore: { onFinish, formLoading },
+    refineCore: { onFinish, formLoading, id },
     formState: { errors },
   } = useForm<LocationFormData>({ refineCoreProps: { resource: 'locations' } });
+
+  const { fields: imgFields, append: addImg, remove: removeImg } =
+    useFieldArray({ control, name: 'images' });
 
   const imagePath = watch('image_path');
   const imageUrl = watch('image_url');
   const quotationPath = watch('quotation_path');
+  const imageValues = watch('images') ?? [];
+
+  // The gallery is a separate table, so refine's form cannot load or save it —
+  // both halves are done by hand here, mirroring what the tour form used to do.
+  const [loadingImages, setLoadingImages] = useState(mode === 'edit');
+  useEffect(() => {
+    if (mode !== 'edit' || !id) return;
+    (async () => {
+      const { data } = await supabase
+        .from('location_images').select('*').eq('location_id', id).order('sort_order');
+      if (data?.length) setValue('images', data as LocationImage[]);
+      setLoadingImages(false);
+    })();
+  }, [id, mode, setValue]);
+
+  async function handleSubmitWithImages(data: LocationFormData) {
+    const { images, ...locationData } = data;
+    const result = await onFinish(locationData) as { data?: { id: number } } | undefined;
+    const locationId = (result?.data?.id ?? id) as number;
+    if (!locationId) return;
+
+    // Replace wholesale: `sort_order` comes from the row's position in the form,
+    // so a reorder or a deletion has to rewrite the whole set anyway.
+    await supabase.from('location_images').delete().eq('location_id', locationId);
+    if (images?.length) {
+      await supabase.from('location_images').insert(
+        images
+          .filter(img => img.image_path?.trim() || img.image_url?.trim())
+          .map(({ id: _id, ...img }, i) => ({ ...img, location_id: locationId, sort_order: i })),
+      );
+    }
+    list('locations');
+  }
 
   return (
     <div className="p-6 max-w-2xl">
@@ -58,12 +109,12 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
         <h2 className="text-xl font-bold">{mode === 'create' ? 'Thêm Location' : 'Sửa Location'}</h2>
       </div>
 
-      {mode === 'edit' && formLoading ? (
+      {mode === 'edit' && (formLoading || loadingImages) ? (
         <div className="flex items-center gap-2 text-muted-foreground py-12 justify-center"><Spinner /> Đang tải…</div>
       ) : (
       <Card>
         <CardContent className="pt-6">
-          <form onSubmit={handleSubmit(onFinish)} className="flex flex-col gap-5">
+          <form onSubmit={handleSubmit(handleSubmitWithImages as never)} className="flex flex-col gap-5">
             <Field label="Tên *" error={errors.name?.message as string}>
               <Input {...register('name', { required: 'Bắt buộc' })} />
             </Field>
@@ -88,6 +139,54 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
             <Field label="Hoặc dùng URL ảnh ngoài">
               <Input type="url" {...register('image_url')} placeholder="https://..." />
             </Field>
+
+            <hr className="border-border" />
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Thư viện ảnh ({imgFields.length})
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Dùng chung cho mọi tour thuộc cung này — chỉ cần upload một lần.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => addImg({ image_path: '', image_url: '', caption: '', caption_en: '', sort_order: imgFields.length })}
+                className="border-dashed border-primary text-primary hover:text-primary"
+              >
+                + Thêm ảnh
+              </Button>
+            </div>
+            {imgFields.map((field, i) => (
+              <div key={field.id} className="border border-border rounded-lg p-3 flex gap-3 items-start">
+                <ImageUpload
+                  prefix="locations/images"
+                  currentPath={imageValues[i]?.image_path}
+                  currentUrl={imageValues[i]?.image_url}
+                  onUploaded={key => setValue(`images.${i}.image_path`, key)}
+                />
+                <div className="flex-1 flex flex-col gap-2">
+                  <Input placeholder="Hoặc URL ngoài" {...register(`images.${i}.image_url`)} />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input placeholder="Caption (VI)" {...register(`images.${i}.caption`)} />
+                    <Input placeholder="Caption (EN)" {...register(`images.${i}.caption_en`)} />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeImg(i)}
+                  className="text-destructive text-lg p-1 bg-transparent border-none cursor-pointer"
+                  aria-label="Xoá ảnh"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+
+            <hr className="border-border" />
 
             <Field label="File PDF báo giá">
               {quotationPath && <span className="text-xs text-green-700">✓ {quotationPath}</span>}
