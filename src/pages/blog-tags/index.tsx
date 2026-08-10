@@ -133,7 +133,7 @@ export function BlogTagList() {
   });
 
   return (
-    <div className="p-6 max-w-4xl">
+    <div className="p-6">
       <div className="flex items-center gap-3 mb-5">
         <Button variant="ghost" size="sm" onClick={() => (window.location.href = '/blogs')}>← Quay lại</Button>
         <h2 className="text-xl font-bold">🏷️ Chủ đề blog</h2>

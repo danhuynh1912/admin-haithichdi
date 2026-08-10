@@ -143,7 +143,7 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
   }
 
   return (
-    <div className="p-6 max-w-2xl">
+    <div className="p-6">
       <div className="flex items-center gap-3 mb-6">
         <Button variant="ghost" size="sm" onClick={() => list('locations')}>← Quay lại</Button>
         <h2 className="text-xl font-bold">{mode === 'create' ? 'Thêm Location' : 'Sửa Location'}</h2>

@@ -104,6 +104,12 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
     meta: { select: ROUTE_SELECT },
   });
   const routes = locationsQuery?.data?.data ?? [];
+  // The <option> list has to exist before the record's location_id is written
+  // into the <select>: assigning a value a browser has no matching option for
+  // is silently discarded, and nothing reassigns it once the options arrive.
+  // The tour would then look like it had no route while the form state held
+  // one — every inherited field populated, the picker blank.
+  const routesLoading = locationsQuery?.isLoading ?? false;
 
   const {
     register, handleSubmit, watch, setValue,
@@ -249,13 +255,13 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
   }
 
   return (
-    <div className="p-6 max-w-3xl">
+    <div className="p-6">
       <div className="flex items-center gap-3 mb-6">
         <Button variant="ghost" size="sm" onClick={() => list('tours')}>← Quay lại</Button>
         <h2 className="text-xl font-bold">{mode === 'create' ? 'Thêm Tour' : 'Sửa Tour'}</h2>
       </div>
 
-      {mode === 'edit' && formLoading ? (
+      {(mode === 'edit' && formLoading) || routesLoading ? (
         <div className="flex items-center gap-2 text-muted-foreground py-12 justify-center"><Spinner /> Đang tải…</div>
       ) : (
         <Card>

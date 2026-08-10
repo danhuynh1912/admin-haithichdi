@@ -199,7 +199,7 @@ export function BlogForm({ mode }: { mode: 'create' | 'edit' }) {
   const busy = formLoading || submitting;
 
   return (
-    <div className="p-6 max-w-4xl">
+    <div className="p-6">
       <div className="flex items-center gap-3 mb-6">
         <Button variant="ghost" size="sm" onClick={() => list('blogs')}>← Quay lại</Button>
         <h2 className="text-xl font-bold">{mode === 'create' ? 'Viết bài mới' : 'Sửa bài viết'}</h2>
