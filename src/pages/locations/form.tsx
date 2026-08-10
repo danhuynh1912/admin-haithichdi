@@ -48,13 +48,7 @@ interface LocationFormData {
   image_url: string;
   quotation_path: string;
   description: string;
-  home_display_name: string;
-  home_subtitle: string;
-  home_feature_summary: string;
   description_en: string;
-  home_display_name_en: string;
-  home_subtitle_en: string;
-  home_feature_summary_en: string;
   home_feature_order: number | null;
 }
 
@@ -325,24 +319,6 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
 
             <hr className="border-border" />
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Trang chủ</p>
-
-            <BilingualField
-              label="Tên hiển thị trang chủ (để trống = dùng tên gốc)"
-              vi={<Input {...register('home_display_name')} />}
-              en={<Input {...register('home_display_name_en')} placeholder={EN_PLACEHOLDER} />}
-            />
-
-            <BilingualField
-              label="Subtitle trang chủ"
-              vi={<Input {...register('home_subtitle')} />}
-              en={<Input {...register('home_subtitle_en')} placeholder={EN_PLACEHOLDER} />}
-            />
-
-            <BilingualField
-              label="Tóm tắt trang chủ"
-              vi={<Textarea {...register('home_feature_summary')} rows={2} />}
-              en={<Textarea {...register('home_feature_summary_en')} rows={2} placeholder={EN_PLACEHOLDER} />}
-            />
 
             <Field label="Thứ tự featured (1–4, để trống = không hiển thị)">
               <Input
