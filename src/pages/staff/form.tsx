@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
+import { SaveBar, useSavedFlash } from '@/components/SaveBar';
 import { BilingualField, EN_PLACEHOLDER } from '@/components/BilingualField';
 
 interface StaffFormData {
@@ -51,7 +52,8 @@ function toProfilePayload(v: StaffFormData) {
 }
 
 export function StaffForm({ mode }: { mode: 'create' | 'edit' }) {
-  const { list } = useNavigation();
+  const { list, edit } = useNavigation();
+  const { saved, flash } = useSavedFlash();
   const { id } = useParams<{ id: string }>();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -80,13 +82,15 @@ export function StaffForm({ mode }: { mode: 'create' | 'edit' }) {
     setSubmitError(null);
     if (mode === 'edit') {
       await onFinish(toProfilePayload(values));
-      list('profiles');
+      flash();
       return;
     }
     setSubmitting(true);
     try {
-      await createStaff(values.username, values.password, toProfilePayload(values));
-      list('profiles');
+      // Creating goes to the new account's edit page rather than the list:
+      // submitting again from here would try to make the same username twice.
+      const created = await createStaff(values.username, values.password, toProfilePayload(values));
+      edit('profiles', created.id);
     } catch (e) {
       setSubmitError((e as Error).message);
     } finally {
@@ -237,10 +241,7 @@ export function StaffForm({ mode }: { mode: 'create' | 'edit' }) {
               </label>
             </Field>
 
-            <div className="flex gap-3 mt-2">
-              <Button type="submit" disabled={busy}>{busy ? <><Spinner /> Đang lưu…</> : 'Lưu'}</Button>
-              <Button type="button" variant="outline" onClick={() => list('profiles')}>Hủy</Button>
-            </div>
+            <SaveBar busy={busy} saved={saved} onCancel={() => list('profiles')} />
           </form>
         </CardContent>
       </Card>

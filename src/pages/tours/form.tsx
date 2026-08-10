@@ -7,10 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
+import { SaveBar, useSavedFlash } from '@/components/SaveBar';
 import { BilingualField, EN_PLACEHOLDER } from '@/components/BilingualField';
 interface TourFormData {
-  title: string; summary: string; description_md: string; itinerary_md: string;
-  title_en: string; summary_en: string; description_md_en: string; itinerary_md_en: string;
+  title: string; summary: string; description_md: string;
+  title_en: string; summary_en: string; description_md_en: string;
   start_date: string; end_date: string; price: string; location_id: number;
   max_guests: number; is_active: boolean;
 }
@@ -23,19 +24,16 @@ interface RouteDefaults {
   default_summary_en: string;
   default_description_md: string;
   default_description_md_en: string;
-  default_itinerary_md: string;
-  default_itinerary_md_en: string;
   default_price: string | null;
   default_max_guests: number;
 }
 
 /** The fields a tour may either inherit from its route or hold its own copy of. */
-type InheritableField = 'summary' | 'description_md' | 'itinerary_md';
+type InheritableField = 'summary' | 'description_md';
 
 const ROUTE_SELECT =
   'id,name,default_summary,default_summary_en,default_description_md,' +
-  'default_description_md_en,default_itinerary_md,default_itinerary_md_en,' +
-  'default_price,default_max_guests';
+  'default_description_md_en,default_price,default_max_guests';
 
 /** What a tour is called before anyone renames it. */
 const autoTitle = (routeName: string) => `Chinh phục ${routeName}`;
@@ -99,6 +97,7 @@ function Field({ label, error, children }: { label: string; error?: string; chil
 
 export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
   const { list, edit } = useNavigation();
+  const { saved, flash } = useSavedFlash();
   const { query: locationsQuery } = useList<RouteDefaults>({
     resource: 'locations',
     pagination: { pageSize: 100 },
@@ -156,8 +155,12 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
   }, [mode, route, routes, setValue, watch]);
 
   async function handleSubmitTour(data: TourFormData) {
-    await onFinish(data);
-    list('tours');
+    const result = await onFinish(data) as { data?: { id: number } } | undefined;
+    // Saving stays on the record; a create still has to move to that record's
+    // edit page, or pressing Lưu again would make a second tour.
+    const created = result?.data?.id;
+    if (mode === 'create' && created) edit('tours', created);
+    else flash();
   }
 
   // A field is overridden when the tour holds its own text — empty means the
@@ -316,7 +319,6 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
 
               {renderInheritable('summary', 'Tóm tắt', route?.default_summary ?? '', route?.default_summary_en ?? '', 2)}
               {renderInheritable('description_md', 'Mô tả (Markdown)', route?.default_description_md ?? '', route?.default_description_md_en ?? '', 5, true)}
-              {renderInheritable('itinerary_md', 'Lịch trình tổng (Markdown)', route?.default_itinerary_md ?? '', route?.default_itinerary_md_en ?? '', 5, true)}
 
               {/* Photos and the day-by-day plan belong to the route: every
                   departure walks the same trail, so they are edited once there.
@@ -361,10 +363,11 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
               </>
               )}
 
-              <div className="flex gap-3 mt-2">
-                <Button type="submit" disabled={formLoading || !routeId}>{formLoading ? <><Spinner /> Đang lưu…</> : 'Lưu'}</Button>
-                <Button type="button" variant="outline" onClick={() => list('tours')}>Hủy</Button>
-              </div>
+              <SaveBar
+                busy={formLoading || !routeId}
+                saved={saved}
+                onCancel={() => list('tours')}
+              />
             </form>
           </CardContent>
         </Card>

@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
+import { SaveBar, useSavedFlash } from '@/components/SaveBar';
 import { BilingualField, EN_PLACEHOLDER } from '@/components/BilingualField';
 
 /** One photo in the route's gallery — shared by every tour up that route. */
@@ -39,8 +40,6 @@ interface LocationFormData {
   default_summary_en: string;
   default_description_md: string;
   default_description_md_en: string;
-  default_itinerary_md: string;
-  default_itinerary_md_en: string;
   default_price: string;
   default_max_guests: number;
   name: string;
@@ -70,7 +69,8 @@ function Field({ label, error, children }: { label: string; error?: string; chil
 }
 
 export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
-  const { list } = useNavigation();
+  const { list, edit } = useNavigation();
+  const { saved, flash } = useSavedFlash();
   const {
     register,
     handleSubmit,
@@ -134,7 +134,12 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
         itinerary_days.map(({ id: _id, ...d }, i) => ({ ...d, location_id: locationId, day_number: i + 1 })),
       );
     }
-    list('locations');
+
+    // Saving stays on the record. A create has to move to that record's edit
+    // page even so, or the form is still in create mode and pressing Lưu again
+    // would make a second copy.
+    if (mode === 'create') edit('locations', locationId);
+    else flash();
   }
 
   return (
@@ -259,12 +264,6 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
               vi={<Textarea {...register('default_description_md')} rows={5} className="font-mono" />}
               en={<Textarea {...register('default_description_md_en')} rows={5} className="font-mono" placeholder={EN_PLACEHOLDER} />}
             />
-            <BilingualField
-              label="Lịch trình tổng mặc định (Markdown)"
-              vi={<Textarea {...register('default_itinerary_md')} rows={5} className="font-mono" />}
-              en={<Textarea {...register('default_itinerary_md_en')} rows={5} className="font-mono" placeholder={EN_PLACEHOLDER} />}
-            />
-
             <div className="flex justify-between items-center">
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
@@ -354,10 +353,7 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
               />
             </Field>
 
-            <div className="flex gap-3 mt-2">
-              <Button type="submit" disabled={formLoading}>{formLoading ? <><Spinner /> Đang lưu…</> : 'Lưu'}</Button>
-              <Button type="button" variant="outline" onClick={() => list('locations')}>Hủy</Button>
-            </div>
+            <SaveBar busy={formLoading} saved={saved} onCancel={() => list('locations')} />
           </form>
         </CardContent>
       </Card>

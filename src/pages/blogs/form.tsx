@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
+import { SaveBar, useSavedFlash } from '@/components/SaveBar';
 
 interface BlogFormData {
   slug: string;
@@ -62,7 +63,8 @@ function formatDate(value: string | undefined): string {
 }
 
 export function BlogForm({ mode }: { mode: 'create' | 'edit' }) {
-  const { list } = useNavigation();
+  const { list, edit } = useNavigation();
+  const { saved, flash } = useSavedFlash();
   // Read from the route rather than from useForm's own result — refineCoreProps
   // is an argument to that same call, so it cannot reference what it returns.
   const { id } = useParams<{ id: string }>();
@@ -183,7 +185,10 @@ export function BlogForm({ mode }: { mode: 'create' | 'edit' }) {
       });
       if (rows.length) await supabase.from('blog_images').insert(rows);
 
-      list('blogs');
+      // Saving stays on the post; a create moves to its edit page so pressing
+      // Lưu again edits it instead of publishing a duplicate.
+      if (mode === 'create') edit('blogs', blogId);
+      else flash();
     } catch (e) {
       setSubmitError((e as Error).message);
     } finally {
@@ -353,10 +358,7 @@ export function BlogForm({ mode }: { mode: 'create' | 'edit' }) {
                 />
               </Field>
 
-              <div className="flex gap-3 mt-2">
-                <Button type="submit" disabled={busy}>{busy ? <><Spinner /> Đang lưu…</> : 'Lưu'}</Button>
-                <Button type="button" variant="outline" onClick={() => list('blogs')}>Hủy</Button>
-              </div>
+              <SaveBar busy={busy} saved={saved} onCancel={() => list('blogs')} />
             </form>
           </CardContent>
         </Card>
