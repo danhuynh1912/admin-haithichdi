@@ -286,7 +286,10 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
             {dayFields.map((field, i) => (
               <div key={field.id} className="border border-border rounded-lg p-3 flex flex-col gap-2">
                 <div className="flex gap-2 items-center">
-                  <span className="font-bold text-sm min-w-[60px]">Ngày {i + 1}</span>
+                  {/* Numbered from 0 to match the public page, where the first
+                      entry is the travel-in day. The stored day_number stays
+                      1-based; only the label shifts. */}
+                  <span className="font-bold text-sm min-w-[60px]">Ngày {i}</span>
                   <Input placeholder="Tiêu đề ngày (VI)" {...register(`itinerary_days.${i}.title`)} className="flex-1" />
                   <Input placeholder="Tiêu đề ngày (EN)" {...register(`itinerary_days.${i}.title_en`)} className="flex-1" />
                   <button
