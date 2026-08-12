@@ -391,7 +391,8 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
               )}
 
               <SaveBar
-                busy={formLoading || !routeId}
+                busy={formLoading}
+                disabled={!routeId}
                 saved={saved}
                 onCancel={() => list('tours')}
               />

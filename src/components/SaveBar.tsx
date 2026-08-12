@@ -34,19 +34,28 @@ export function useSavedFlash(durationMs = 2500) {
 export function SaveBar({
   busy,
   saved,
+  disabled = false,
   onCancel,
   saveLabel = 'Lưu',
   cancelLabel = 'Quay lại danh sách',
 }: {
+  /** A save is in flight. Shows the spinner. */
   busy: boolean;
   saved: boolean;
+  /**
+   * There is nothing to save yet — a required choice higher up the form is
+   * still empty. Separate from `busy` on purpose: folding the two together
+   * leaves the button reading "Đang lưu…" forever on a form nobody has
+   * started filling in.
+   */
+  disabled?: boolean;
   onCancel: () => void;
   saveLabel?: string;
   cancelLabel?: string;
 }) {
   return (
     <div className="flex items-center gap-3 mt-2">
-      <Button type="submit" disabled={busy}>
+      <Button type="submit" disabled={busy || disabled}>
         {busy ? <><Spinner /> Đang lưu…</> : saveLabel}
       </Button>
       <Button type="button" variant="outline" onClick={onCancel}>
