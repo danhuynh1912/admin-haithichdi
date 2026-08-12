@@ -81,7 +81,7 @@ export function BlogForm({ mode }: { mode: 'create' | 'edit' }) {
     formState: { errors },
   } = useForm<BlogFormData>({
     refineCoreProps: mode === 'edit'
-      ? { resource: 'blogs', action: 'edit', id, redirect: false }
+      ? { resource: 'blogs', action: 'edit', id }
       : { resource: 'blogs', action: 'create' },
     defaultValues: { status: 'draft', content_md: '', content_md_en: '' },
   });

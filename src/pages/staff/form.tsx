@@ -64,7 +64,7 @@ export function StaffForm({ mode }: { mode: 'create' | 'edit' }) {
     formState: { errors },
   } = useForm<StaffFormData>({
     refineCoreProps: mode === 'edit'
-      ? { resource: 'profiles', action: 'edit', id, redirect: false }
+      ? { resource: 'profiles', action: 'edit', id }
       : { resource: 'profiles', action: 'create' },
     defaultValues: { role: 'sale', is_active: true, years_experience: 0, strengths: [] },
   });

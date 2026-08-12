@@ -41,7 +41,18 @@ export default function App() {
           { name: 'profiles', list: '/staff', create: '/staff/create', edit: '/staff/edit/:id', meta: { label: 'Tài khoản' } },
           { name: 'staff_admin', list: '/staff' },
         ]}
-        options={{ syncWithLocation: true, warnWhenUnsavedChanges: true }}
+        options={{
+          syncWithLocation: true,
+          warnWhenUnsavedChanges: true,
+          // Saving keeps the editor on the record. refine otherwise walks every
+          // successful mutation back to the list, which loses the scroll
+          // position and every collapsed section mid-edit. Each form already
+          // decides where to go itself — a create moves to its own edit page,
+          // an edit stays put and flashes "Đã lưu" — so this has to be off
+          // panel-wide, not per form, or the next form written here inherits
+          // the bounce again by saying nothing.
+          redirect: { afterCreate: false, afterEdit: false, afterClone: false },
+        }}
       >
         <Routes>
           <Route path="/login" element={<Login />} />
