@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useForm } from '@refinedev/react-hook-form';
-import { useNavigation } from '@refinedev/core';
+import { useInvalidate, useNavigation } from '@refinedev/core';
 import { useFieldArray } from 'react-hook-form';
 import { ImageUpload } from '@/components/ImageUpload';
 import { supabase } from '@/lib/supabase';
@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { SaveBar, useSavedFlash } from '@/components/SaveBar';
 import { BilingualField, EN_PLACEHOLDER } from '@/components/BilingualField';
+import { durationLabel, itineraryRowsNeeded, type RouteDuration } from '@/lib/duration';
 
 /** One photo in the route's gallery — shared by every tour up that route. */
 interface LocationImage {
@@ -42,6 +43,9 @@ interface LocationFormData {
   default_description_md_en: string;
   default_price: string;
   default_max_guests: number;
+  default_trek_days: number;
+  /** Not edited here — read only so the summary below the field can be honest. */
+  default_lead_nights: number;
   name: string;
   elevation_m: number;
   image_path: string;
@@ -62,9 +66,27 @@ function Field({ label, error, children }: { label: string; error?: string; chil
   );
 }
 
-export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
+/**
+ * @param recordId  Which route to edit. Only needed away from `/locations/edit/:id`,
+ *                  where refine reads the id off the route itself.
+ * @param onDone    Present when the form is embedded in a dialog: it replaces the
+ *                  page chrome — no back link, no card, and "Đóng" instead of
+ *                  "Quay lại danh sách" — and saving stays put rather than
+ *                  navigating, since the caller is still mid-edit behind it.
+ */
+export function LocationForm({
+  mode,
+  recordId,
+  onDone,
+}: {
+  mode: 'create' | 'edit';
+  recordId?: number;
+  onDone?: () => void;
+}) {
   const { list, edit } = useNavigation();
+  const invalidate = useInvalidate();
   const { saved, flash } = useSavedFlash();
+  const embedded = Boolean(onDone);
   const {
     register,
     handleSubmit,
@@ -73,7 +95,11 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
     watch,
     refineCore: { onFinish, formLoading, id },
     formState: { errors },
-  } = useForm<LocationFormData>({ refineCoreProps: { resource: 'locations' } });
+  } = useForm<LocationFormData>({
+    refineCoreProps: recordId
+      ? { resource: 'locations', action: 'edit', id: recordId }
+      : { resource: 'locations' },
+  });
 
   const { fields: imgFields, append: addImg, remove: removeImg } =
     useFieldArray({ control, name: 'images' });
@@ -84,6 +110,15 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
   const imageUrl = watch('image_url');
   const quotationPath = watch('quotation_path');
   const imageValues = watch('images') ?? [];
+
+  // Read live so the summary under the field tracks what is being typed. Lead
+  // nights are not editable here: every route today leaves the evening before,
+  // and the column exists so the exception is an update rather than a release.
+  const leadNights = Number(watch('default_lead_nights'));
+  const duration: RouteDuration = {
+    trekDays: Number(watch('default_trek_days')) || 0,
+    leadNights: Number.isFinite(leadNights) ? leadNights : 1,
+  };
 
   // The gallery is a separate table, so refine's form cannot load or save it —
   // both halves are done by hand here, mirroring what the tour form used to do.
@@ -129,26 +164,43 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
       );
     }
 
+    // These two tables are written straight through supabase, so refine never
+    // learns they changed. A tour form open behind this dialog is reading both
+    // to preview what the route lends it, and would otherwise keep showing the
+    // gallery and the itinerary as they were before this save.
+    invalidate({ resource: 'location_images', invalidates: ['list'] });
+    invalidate({ resource: 'location_itinerary_days', invalidates: ['list'] });
+
     // Saving stays on the record. A create has to move to that record's edit
     // page even so, or the form is still in create mode and pressing Lưu again
-    // would make a second copy.
-    if (mode === 'create') edit('locations', locationId);
+    // would make a second copy — except in a dialog, where navigating would
+    // take the page underneath with it.
+    if (mode === 'create' && !embedded) edit('locations', locationId);
     else flash();
   }
 
-  return (
-    <div className="p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="sm" onClick={() => list('locations')}>← Quay lại</Button>
-        <h2 className="text-xl font-bold">{mode === 'create' ? 'Thêm Location' : 'Sửa Location'}</h2>
-      </div>
+  const loading = mode === 'edit' && (formLoading || loadingRelated);
 
-      {mode === 'edit' && (formLoading || loadingRelated) ? (
+  return (
+    <div className={embedded ? undefined : 'p-6'}>
+      {!embedded && (
+        <div className="flex items-center gap-3 mb-6">
+          <Button variant="ghost" size="sm" onClick={() => list('locations')}>← Quay lại</Button>
+          <h2 className="text-xl font-bold">{mode === 'create' ? 'Thêm Location' : 'Sửa Location'}</h2>
+        </div>
+      )}
+
+      {loading ? (
         <div className="flex items-center gap-2 text-muted-foreground py-12 justify-center"><Spinner /> Đang tải…</div>
       ) : (
-      <Card>
-        <CardContent className="pt-6">
-          <form onSubmit={handleSubmit(handleSubmitWithRelated as never)} className="flex flex-col gap-5">
+      <Shell embedded={embedded}>
+          <form
+            // A portalled dialog still sits inside its opener in the React tree,
+            // so this submit would bubble to the tour form behind it and create
+            // a tour every time a route is saved.
+            onSubmit={event => { event.stopPropagation(); handleSubmit(handleSubmitWithRelated as never)(event); }}
+            className="flex flex-col gap-5"
+          >
             <Field label="Tên *" error={errors.name?.message as string}>
               <Input {...register('name', { required: 'Bắt buộc' })} />
             </Field>
@@ -248,6 +300,17 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
               sửa ở đây không làm đổi giá tour đã tạo.
             </p>
 
+            <Field label="Số ngày leo" error={errors.default_trek_days?.message as string}>
+              <Input
+                type="number"
+                min={0}
+                max={30}
+                className="w-24"
+                {...register('default_trek_days', { valueAsNumber: true })}
+              />
+            </Field>
+            <DurationSummary duration={duration} itineraryRows={dayFields.length} />
+
             <BilingualField
               label="Tóm tắt mặc định"
               vi={<Textarea {...register('default_summary')} rows={2} />}
@@ -332,11 +395,65 @@ export function LocationForm({ mode }: { mode: 'create' | 'edit' }) {
               />
             </Field>
 
-            <SaveBar busy={formLoading} saved={saved} onCancel={() => list('locations')} />
+            <SaveBar
+              busy={formLoading}
+              saved={saved}
+              onCancel={onDone ?? (() => list('locations'))}
+              cancelLabel={embedded ? 'Đóng' : undefined}
+            />
           </form>
-        </CardContent>
-      </Card>
+      </Shell>
       )}
     </div>
+  );
+}
+
+/**
+ * Says out loud what the number above it means, and whether the day rows
+ * agree with it.
+ *
+ * Two places describe the same trip — this field and the itinerary — and
+ * letting them disagree quietly is exactly what put one tour's last day after
+ * its own return date.
+ */
+function DurationSummary({
+  duration,
+  itineraryRows,
+}: {
+  duration: RouteDuration;
+  itineraryRows: number;
+}) {
+  if (duration.trekDays <= 0) {
+    return (
+      <p className="-mt-2 text-xs text-muted-foreground">
+        Chưa khai báo số ngày leo — cung này chưa tạo tour hàng loạt được.
+      </p>
+    );
+  }
+
+  const needed = itineraryRowsNeeded(duration);
+  const agrees = needed === itineraryRows;
+
+  return (
+    <div className="-mt-2 flex flex-col gap-1 text-xs">
+      <p className="text-muted-foreground">
+        <strong className="font-semibold text-foreground">{durationLabel(duration)}</strong>
+        {' · '}khởi hành tối hôm trước, ngày di chuyển không tính vào nhãn này
+      </p>
+      <p className={agrees ? 'text-muted-foreground' : 'font-medium text-destructive'}>
+        Lịch trình cần {needed} dòng ({duration.leadNights} di chuyển +{' '}
+        {duration.trekDays} ngày leo) — đang có {itineraryRows}.
+      </p>
+    </div>
+  );
+}
+
+/** The card the form sits in on its own page, and nothing at all inside a dialog. */
+function Shell({ embedded, children }: { embedded: boolean; children: React.ReactNode }) {
+  if (embedded) return <>{children}</>;
+  return (
+    <Card>
+      <CardContent className="pt-6">{children}</CardContent>
+    </Card>
   );
 }

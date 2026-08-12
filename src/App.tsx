@@ -11,6 +11,7 @@ import { LocationList } from '@/pages/locations';
 import { LocationForm } from '@/pages/locations/form';
 import { TourList } from '@/pages/tours';
 import { TourForm } from '@/pages/tours/form';
+import { TourBulkCreate } from '@/pages/tours/bulk';
 import { BookingList } from '@/pages/bookings';
 import { BlogList } from '@/pages/blogs';
 import { BlogForm } from '@/pages/blogs/form';
@@ -68,6 +69,7 @@ export default function App() {
             <Route path="/locations/edit/:id" element={<RequireAdmin><LocationForm mode="edit" /></RequireAdmin>} />
             <Route path="/tours" element={<RequireAdmin><TourList /></RequireAdmin>} />
             <Route path="/tours/create" element={<RequireAdmin><TourForm mode="create" /></RequireAdmin>} />
+            <Route path="/tours/bulk" element={<RequireAdmin><TourBulkCreate /></RequireAdmin>} />
             <Route path="/tours/edit/:id" element={<RequireAdmin><TourForm mode="edit" /></RequireAdmin>} />
             <Route path="/blogs" element={<RequireAdmin><BlogList /></RequireAdmin>} />
             <Route path="/blogs/create" element={<RequireAdmin><BlogForm mode="create" /></RequireAdmin>} />

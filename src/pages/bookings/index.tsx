@@ -6,7 +6,7 @@ import { DataTable } from '@/components/DataTable';
 import { Badge, badgeVariants } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/dialog';
-import { Select } from '@/components/ui/select';
+import { SimpleSelect } from '@/components/SimpleSelect';
 import { cn } from '@/lib/utils';
 
 interface Booking {
@@ -46,6 +46,9 @@ const STATUS_LABEL: Record<string, string> = {
 // bookings themselves rather than just blanking out the embed.
 const SELECT_WITH_TOUR = '*, tours!inner(id, title, location_id, locations(id, name))';
 
+/** "No filter" as a real value — a blank one reads as nothing chosen. */
+const ALL = 'all';
+
 const statusVariant = (s: string) =>
   s === 'confirmed' ? 'success' : s === 'pending' ? 'warning' : 'destructive';
 
@@ -56,8 +59,8 @@ const col = createColumnHelper<Booking>();
 
 export function BookingList() {
   const { mutate: update } = useUpdate<Booking>();
-  const [locationId, setLocationId] = useState('');
-  const [status, setStatus] = useState('');
+  const [locationId, setLocationId] = useState(ALL);
+  const [status, setStatus] = useState(ALL);
   const [openId, setOpenId] = useState<number | null>(null);
 
   const { query: locationsQuery } = useList<LocationOption>({
@@ -68,8 +71,8 @@ export function BookingList() {
   const locations = locationsQuery?.data?.data ?? [];
 
   const filters: CrudFilter[] = [];
-  if (locationId) filters.push({ field: 'tours.location_id', operator: 'eq', value: Number(locationId) });
-  if (status) filters.push({ field: 'status', operator: 'eq', value: status });
+  if (locationId !== ALL) filters.push({ field: 'tours.location_id', operator: 'eq', value: Number(locationId) });
+  if (status !== ALL) filters.push({ field: 'status', operator: 'eq', value: status });
 
   const columns = [
     col.accessor('full_name', {
@@ -149,26 +152,24 @@ export function BookingList() {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <h2 className="text-xl font-bold">📋 Bookings</h2>
         <div className="flex flex-wrap gap-2">
-          <Select
-            aria-label="Lọc theo cung"
+          <SimpleSelect
+            ariaLabel="Lọc theo cung"
             value={locationId}
-            onChange={e => { setLocationId(e.target.value); resetPage(); }}
-          >
-            <option value="">Tất cả cung</option>
-            {locations.map(l => (
-              <option key={l.id} value={l.id}>{l.name}</option>
-            ))}
-          </Select>
-          <Select
-            aria-label="Lọc theo trạng thái"
+            onValueChange={next => { setLocationId(next); resetPage(); }}
+            options={[
+              { value: ALL, label: 'Tất cả cung' },
+              ...locations.map(l => ({ value: String(l.id), label: l.name })),
+            ]}
+          />
+          <SimpleSelect
+            ariaLabel="Lọc theo trạng thái"
             value={status}
-            onChange={e => { setStatus(e.target.value); resetPage(); }}
-          >
-            <option value="">Tất cả trạng thái</option>
-            {Object.entries(STATUS_LABEL).map(([val, label]) => (
-              <option key={val} value={val}>{label}</option>
-            ))}
-          </Select>
+            onValueChange={next => { setStatus(next); resetPage(); }}
+            options={[
+              { value: ALL, label: 'Tất cả trạng thái' },
+              ...Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label })),
+            ]}
+          />
         </div>
       </div>
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from '@refinedev/react-hook-form';
+import { useController } from 'react-hook-form';
 import { useList, useNavigation } from '@refinedev/core';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -9,6 +10,9 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { SaveBar, useSavedFlash } from '@/components/SaveBar';
 import { BilingualField, EN_PLACEHOLDER } from '@/components/BilingualField';
+import { Modal } from '@/components/ui/dialog';
+import { SimpleSelect } from '@/components/SimpleSelect';
+import { LocationForm } from '@/pages/locations/form';
 interface TourFormData {
   title: string; summary: string; description_md: string;
   title_en: string; summary_en: string; description_md_en: string;
@@ -34,6 +38,9 @@ type InheritableField = 'summary' | 'description_md';
 const ROUTE_SELECT =
   'id,name,default_summary,default_summary_en,default_description_md,' +
   'default_description_md_en,default_price,default_max_guests';
+
+/** Stands in for "no route yet": a blank select value reads as unset. */
+const NONE = 'none';
 
 /** What a tour is called before anyone renames it. */
 const autoTitle = (routeName: string) => `Chinh phục ${routeName}`;
@@ -112,14 +119,17 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
   const routesLoading = locationsQuery?.isLoading ?? false;
 
   const {
-    register, handleSubmit, watch, setValue,
+    register, handleSubmit, watch, setValue, control,
     refineCore: { onFinish, formLoading },
     formState: { errors },
   } = useForm<TourFormData>({ refineCoreProps: { resource: 'tours' } });
 
-  // An unpicked <select> reads back as NaN through valueAsNumber, so normalise
-  // once here — everything below gates on this rather than on the raw value.
-  const routeId = Number(watch('location_id')) || 0;
+  // The route picker is a popup rather than a native <select>, so it cannot be
+  // registered — it is driven through the form's own controller instead.
+  const { field: routeField } = useController({
+    control, name: 'location_id', rules: { required: true },
+  });
+  const routeId = Number(routeField.value) || 0;
   const route = routes.find(r => r.id === routeId);
 
   // Read-only look at what the route contributes, so the tour can be reviewed
@@ -173,6 +183,7 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
   // route supplies it, exactly how tours_resolved reads it in SQL. `editing`
   // is tracked separately so clearing the box to retype does not yank the
   // editor away mid-edit; only Huỷ closes it.
+  const [editingRoute, setEditingRoute] = useState(false);
   const [editing, setEditing] = useState<Partial<Record<InheritableField, boolean>>>({});
   const isOverridden = (field: InheritableField) => Boolean(String(watch(field) ?? '').trim());
   const isEditing = (field: InheritableField) => Boolean(editing[field]) || isOverridden(field);
@@ -217,7 +228,16 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
       return (
         <BilingualField
           label={label}
-          hint="Cung chưa có nội dung mặc định cho mục này."
+          hint="Cung chưa có nội dung mặc định cho mục này — viết riêng cho tour này, hoặc điền vào cung để mọi tour sau đều dùng được."
+          action={
+            <button
+              type="button"
+              onClick={() => setEditingRoute(true)}
+              className="text-xs font-semibold text-primary underline-offset-4 hover:underline bg-transparent border-none p-0 cursor-pointer text-left"
+            >
+              Sửa thông tin này ở cung {route?.name}
+            </button>
+          }
           vi={editor(field)}
           en={editor(`${field}_en` as keyof TourFormData, EN_PLACEHOLDER)}
         />
@@ -277,15 +297,16 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
                   Chọn cung trước. Tên tour, giá, số khách và toàn bộ nội dung bên dưới
                   lấy mặc định từ cung.
                 </p>
-                <select
-                  {...register('location_id', { required: true, valueAsNumber: true })}
-                  className="flex h-12 w-full rounded-md border border-input bg-background px-3 text-base font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <option value="">— Chọn cung —</option>
-                  {routes.map((l) => (
-                    <option key={l.id} value={l.id}>{l.name}</option>
-                  ))}
-                </select>
+                <SimpleSelect
+                  ariaLabel="Cung"
+                  value={routeId ? String(routeId) : NONE}
+                  onValueChange={next => routeField.onChange(next === NONE ? undefined : Number(next))}
+                  options={[
+                    { value: NONE, label: '— Chọn cung —' },
+                    ...routes.map(l => ({ value: String(l.id), label: l.name })),
+                  ]}
+                  className="w-full text-base font-semibold data-[size=default]:h-12"
+                />
               </div>
 
               {!routeId ? (
@@ -339,7 +360,7 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
                   </span>
                   <button
                     type="button"
-                    onClick={() => edit('locations', routeId)}
+                    onClick={() => setEditingRoute(true)}
                     className="font-semibold text-primary underline-offset-4 hover:underline bg-transparent border-none p-0 cursor-pointer"
                   >
                     Sửa thông tin cung này →
@@ -377,6 +398,23 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
             </form>
           </CardContent>
         </Card>
+      )}
+
+      {/* Editing the route without leaving the tour. Navigating to
+          /locations/edit/:id would throw away everything typed here, which is
+          exactly what someone hits when they discover mid-form that the route
+          has no default text yet. */}
+      {route && (
+        <Modal
+          open={editingRoute}
+          onClose={() => setEditingRoute(false)}
+          title={`Cung — ${route.name}`}
+          description="Nội dung sửa ở đây dùng chung cho mọi tour của cung này. Bấm Lưu rồi Đóng khi xong."
+          dismissible={false}
+          className="top-4 left-4 h-[calc(100dvh-2rem)] max-h-none w-[calc(100vw-2rem)] max-w-none translate-x-0 translate-y-0"
+        >
+          <LocationForm mode="edit" recordId={route.id} onDone={() => setEditingRoute(false)} />
+        </Modal>
       )}
     </div>
   );

@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { useTable } from '@refinedev/react-table';
 import { useDelete, useList, useNavigation, type CrudFilter } from '@refinedev/core';
 import { createColumnHelper, getCoreRowModel } from '@tanstack/react-table';
+import { useNavigate } from 'react-router-dom';
 import { X } from 'lucide-react';
 import { DataTable } from '@/components/DataTable';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
+import { SimpleSelect } from '@/components/SimpleSelect';
 
 interface Tour {
   id: number;
@@ -29,6 +30,16 @@ interface RouteOption {
 
 /** Today as `YYYY-MM-DD`, which is how a `date` column compares in PostgREST. */
 const today = () => new Date().toISOString().slice(0, 10);
+
+/**
+ * "No filter", as a real value rather than an empty string: the select treats a
+ * blank value as nothing chosen and falls back to showing its placeholder, so
+ * the unfiltered state would read as an empty box instead of "Tất cả cung".
+ */
+const ALL = 'all';
+
+const toOptions = (labels: Record<string, string>) =>
+  Object.entries(labels).map(([value, label]) => ({ value, label }));
 
 const PERIOD_LABEL = {
   upcoming: 'Sắp khởi hành',
@@ -56,13 +67,16 @@ const col = createColumnHelper<Tour>();
 
 export function TourList() {
   const { edit, create } = useNavigation();
+  // Bulk create is a screen of its own rather than a resource action, so it is
+  // reached by path — refine's navigation only knows list/create/edit/show.
+  const navigate = useNavigate();
   const { mutate: del } = useDelete();
 
   const [search, setSearch] = useState('');
-  const [routeId, setRouteId] = useState('');
-  const [active, setActive] = useState('');
-  const [period, setPeriod] = useState('');
-  const [i18n, setI18n] = useState('');
+  const [routeId, setRouteId] = useState(ALL);
+  const [active, setActive] = useState(ALL);
+  const [period, setPeriod] = useState(ALL);
+  const [i18n, setI18n] = useState(ALL);
   const query = useDebounced(search.trim());
 
   const { query: routesQuery } = useList<RouteOption>({
@@ -84,8 +98,8 @@ export function TourList() {
       ],
     });
   }
-  if (routeId) filters.push({ field: 'location_id', operator: 'eq', value: Number(routeId) });
-  if (active) filters.push({ field: 'is_active', operator: 'eq', value: active === 'on' });
+  if (routeId !== ALL) filters.push({ field: 'location_id', operator: 'eq', value: Number(routeId) });
+  if (active !== ALL) filters.push({ field: 'is_active', operator: 'eq', value: active === 'on' });
 
   // Departures are the reason this list gets long, so the date window is the
   // filter that actually shortens it. `end_date` decides "past" rather than
@@ -177,10 +191,10 @@ export function TourList() {
 
   const reset = () => {
     setSearch('');
-    setRouteId('');
-    setActive('');
-    setPeriod('');
-    setI18n('');
+    setRouteId(ALL);
+    setActive(ALL);
+    setPeriod(ALL);
+    setI18n(ALL);
     setCurrentPage(1);
   };
 
@@ -188,7 +202,10 @@ export function TourList() {
     <div className="p-6">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold">🏔️ Tours</h2>
-        <Button onClick={() => create('tours')}>+ Thêm Tour</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => navigate('/tours/bulk')}>Tạo nhiều tour</Button>
+          <Button onClick={() => create('tours')}>+ Thêm Tour</Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -199,43 +216,37 @@ export function TourList() {
           aria-label="Tìm theo tên tour"
           className="w-56"
         />
-        <Select
-          aria-label="Lọc theo cung"
+        <SimpleSelect
+          ariaLabel="Lọc theo cung"
           value={routeId}
-          onChange={e => onFilter(setRouteId)(e.target.value)}
-        >
-          <option value="">Tất cả cung</option>
-          {routes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-        </Select>
-        <Select
-          aria-label="Lọc theo thời gian"
+          onValueChange={onFilter(setRouteId)}
+          options={[
+            { value: ALL, label: 'Tất cả cung' },
+            ...routes.map(r => ({ value: String(r.id), label: r.name })),
+          ]}
+        />
+        <SimpleSelect
+          ariaLabel="Lọc theo thời gian"
           value={period}
-          onChange={e => onFilter(setPeriod)(e.target.value)}
-        >
-          <option value="">Mọi thời điểm</option>
-          {Object.entries(PERIOD_LABEL).map(([value, label]) => (
-            <option key={value} value={value}>{label}</option>
-          ))}
-        </Select>
-        <Select
-          aria-label="Lọc theo trạng thái"
+          onValueChange={onFilter(setPeriod)}
+          options={[{ value: ALL, label: 'Mọi thời điểm' }, ...toOptions(PERIOD_LABEL)]}
+        />
+        <SimpleSelect
+          ariaLabel="Lọc theo trạng thái"
           value={active}
-          onChange={e => onFilter(setActive)(e.target.value)}
-        >
-          <option value="">Bật và tắt</option>
-          <option value="on">Đang bật</option>
-          <option value="off">Đã tắt</option>
-        </Select>
-        <Select
-          aria-label="Lọc theo tình trạng dịch"
+          onValueChange={onFilter(setActive)}
+          options={[
+            { value: ALL, label: 'Bật và tắt' },
+            { value: 'on', label: 'Đang bật' },
+            { value: 'off', label: 'Đã tắt' },
+          ]}
+        />
+        <SimpleSelect
+          ariaLabel="Lọc theo tình trạng dịch"
           value={i18n}
-          onChange={e => onFilter(setI18n)(e.target.value)}
-        >
-          <option value="">Mọi bản dịch</option>
-          {Object.entries(I18N_LABEL).map(([value, label]) => (
-            <option key={value} value={value}>{label}</option>
-          ))}
-        </Select>
+          onValueChange={onFilter(setI18n)}
+          options={[{ value: ALL, label: 'Mọi bản dịch' }, ...toOptions(I18N_LABEL)]}
+        />
 
         {filtering && (
           <Button variant="ghost" size="sm" onClick={reset}>

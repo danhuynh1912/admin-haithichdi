@@ -4,6 +4,9 @@ import { XIcon } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
+/** Ways a dialog can close without anyone meaning to close it. */
+const INCIDENTAL_CLOSE = ['outside-press', 'escape-key', 'close-watcher', 'focus-out'];
+
 /**
  * A controlled modal: portal + backdrop + centred popup in one component, so
  * callers only deal with `open`/`onClose`. Base UI handles focus trapping,
@@ -11,6 +14,10 @@ import { cn } from '@/lib/utils';
  *
  * `title` is required — a dialog without an accessible name is unusable with a
  * screen reader.
+ *
+ * `dismissible={false}` narrows closing down to the close button alone. It is
+ * for dialogs holding a form: a misjudged click on the backdrop or a reflexive
+ * Escape would throw away everything typed, and there is no undo for that.
  */
 export function Modal({
   open,
@@ -18,6 +25,7 @@ export function Modal({
   title,
   description,
   className,
+  dismissible = true,
   children,
 }: {
   open: boolean;
@@ -25,10 +33,21 @@ export function Modal({
   title: string;
   description?: string;
   className?: string;
+  dismissible?: boolean;
   children?: React.ReactNode;
 }) {
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={next => { if (!next) onClose(); }}>
+    <DialogPrimitive.Root
+      open={open}
+      disablePointerDismissal={!dismissible}
+      // Gated on the reason rather than on the event, so the close button keeps
+      // working — it reports `close-press`, which is never incidental.
+      onOpenChange={(next, details) => {
+        if (next) return;
+        if (!dismissible && INCIDENTAL_CLOSE.includes(details.reason)) return;
+        onClose();
+      }}
+    >
       <DialogPrimitive.Portal>
         <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px] transition-opacity duration-150 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0" />
         <DialogPrimitive.Popup
