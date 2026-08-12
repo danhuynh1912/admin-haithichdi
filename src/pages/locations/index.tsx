@@ -12,7 +12,6 @@ interface Location {
   image_path: string | null;
   image_url: string;
   home_feature_order: number | null;
-  home_display_name: string;
 }
 
 const col = createColumnHelper<Location>();
@@ -33,7 +32,6 @@ export function LocationList() {
     }),
     col.accessor('name', { header: 'Tên' }),
     col.accessor('elevation_m', { header: 'Độ cao (m)', size: 110 }),
-    col.accessor('home_display_name', { header: 'Tên trang chủ' }),
     col.accessor('home_feature_order', { header: 'Thứ tự', size: 80 }),
     col.display({
       id: 'actions', header: '',
