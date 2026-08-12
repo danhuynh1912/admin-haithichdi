@@ -6,6 +6,7 @@ import { DataTable } from '@/components/DataTable';
 import { Badge, badgeVariants } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/dialog';
+import { Select } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 
 interface Booking {
@@ -44,8 +45,6 @@ const STATUS_LABEL: Record<string, string> = {
 // `tours!inner` is what makes the `tours.location_id` filter narrow the
 // bookings themselves rather than just blanking out the embed.
 const SELECT_WITH_TOUR = '*, tours!inner(id, title, location_id, locations(id, name))';
-
-const selectCls = "flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 const statusVariant = (s: string) =>
   s === 'confirmed' ? 'success' : s === 'pending' ? 'warning' : 'destructive';
@@ -129,6 +128,9 @@ export function BookingList() {
       sorters: { initial: [{ field: 'created_at', order: 'desc' }] },
       pagination: { pageSize: 30 },
     },
+    // These columns have not been checked against what PostgREST can order by,
+    // so the headers stay plain rather than offering a sort that may 400.
+    enableSorting: false,
     getCoreRowModel: getCoreRowModel(),
   });
 
@@ -147,28 +149,26 @@ export function BookingList() {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <h2 className="text-xl font-bold">📋 Bookings</h2>
         <div className="flex flex-wrap gap-2">
-          <select
+          <Select
             aria-label="Lọc theo cung"
             value={locationId}
             onChange={e => { setLocationId(e.target.value); resetPage(); }}
-            className={selectCls}
           >
             <option value="">Tất cả cung</option>
             {locations.map(l => (
               <option key={l.id} value={l.id}>{l.name}</option>
             ))}
-          </select>
-          <select
+          </Select>
+          <Select
             aria-label="Lọc theo trạng thái"
             value={status}
             onChange={e => { setStatus(e.target.value); resetPage(); }}
-            className={selectCls}
           >
             <option value="">Tất cả trạng thái</option>
             {Object.entries(STATUS_LABEL).map(([val, label]) => (
               <option key={val} value={val}>{label}</option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 

@@ -81,6 +81,9 @@ export function BlogList() {
       sorters: { initial: [{ field: 'updated_at', order: 'desc' }] },
       pagination: { pageSize: 30 },
     },
+    // These columns have not been checked against what PostgREST can order by,
+    // so the headers stay plain rather than offering a sort that may 400.
+    enableSorting: false,
     getCoreRowModel: getCoreRowModel(),
   });
 

@@ -97,6 +97,9 @@ export function StaffList() {
   const table = useTable<StaffAccount>({
     columns,
     refineCoreProps: { resource: 'staff_admin', meta: { select: SELECT } },
+    // These columns have not been checked against what PostgREST can order by,
+    // so the headers stay plain rather than offering a sort that may 400.
+    enableSorting: false,
     getCoreRowModel: getCoreRowModel(),
   });
 
