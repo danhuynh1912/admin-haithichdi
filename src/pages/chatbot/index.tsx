@@ -45,7 +45,9 @@ interface ChatbotDocument {
 }
 
 const DOCS_BUCKET = 'chatbot-docs';
-const MAX_DOC_BYTES = 1024 * 1024; // khớp giới hạn trong chatbot-ingest
+// Khớp giới hạn trong chatbot-ingest
+const MAX_TEXT_BYTES = 1024 * 1024;
+const MAX_PDF_BYTES = 5 * 1024 * 1024;
 
 const STATUS_LABEL: Record<ChatbotDocument['status'], { text: string; cls: string }> = {
   pending: { text: 'Chờ xử lý', cls: 'bg-muted text-muted-foreground' },
@@ -151,12 +153,13 @@ export function ChatbotSettingsPage() {
   async function handleUpload(file: File) {
     setDocError('');
     const lower = file.name.toLowerCase();
-    if (!lower.endsWith('.md') && !lower.endsWith('.txt')) {
-      setDocError('Chỉ hỗ trợ file .md hoặc .txt (PDF hãy chuyển sang .md trước).');
+    const isPdf = lower.endsWith('.pdf');
+    if (!isPdf && !lower.endsWith('.md') && !lower.endsWith('.txt')) {
+      setDocError('Chỉ hỗ trợ file .md, .txt hoặc .pdf.');
       return;
     }
-    if (file.size > MAX_DOC_BYTES) {
-      setDocError('File tối đa 1MB — hãy tách nhỏ tài liệu.');
+    if (file.size > (isPdf ? MAX_PDF_BYTES : MAX_TEXT_BYTES)) {
+      setDocError(isPdf ? 'PDF tối đa 5MB — hãy tách nhỏ tài liệu.' : 'File tối đa 1MB — hãy tách nhỏ tài liệu.');
       return;
     }
 
@@ -418,8 +421,9 @@ export function ChatbotSettingsPage() {
         <div>
           <h2 className="text-lg font-bold">Tài liệu tham khảo (RAG)</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Upload file .md/.txt (FAQ, chính sách, kinh nghiệm chuẩn bị…) — chatbot sẽ
-            trích đúng tài liệu để trả lời thay vì bịa.
+            Upload file .md/.txt/.pdf (FAQ, chính sách, kinh nghiệm chuẩn bị…) — chatbot
+            sẽ trích đúng tài liệu để trả lời thay vì bịa. PDF được bóc chữ bằng AI nên
+            xử lý lâu hơn một chút (đọc được cả bản scan).
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -434,7 +438,7 @@ export function ChatbotSettingsPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".md,.txt"
+            accept=".md,.txt,.pdf"
             className="hidden"
             onChange={e => {
               const file = e.target.files?.[0];
