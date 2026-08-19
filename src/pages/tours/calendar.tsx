@@ -171,22 +171,22 @@ export function ToursCalendar() {
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row">
-      <div className="min-w-0 flex-1">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <Button variant="outline" size="sm" onClick={() => shift(-3)}>← 3 tháng trước</Button>
+      <div className="w-full shrink-0 lg:w-[270px]">
+        <div className="mb-3 flex items-center justify-between gap-1">
+          <Button variant="outline" size="sm" title="3 tháng trước" onClick={() => shift(-3)}>←</Button>
           <span className="text-sm font-semibold">
-            Tháng {months[0].getMonth() + 1}/{months[0].getFullYear()} – Tháng {months[2].getMonth() + 1}/{months[2].getFullYear()}
+            T{months[0].getMonth() + 1}/{months[0].getFullYear()} – T{months[2].getMonth() + 1}/{months[2].getFullYear()}
             {loading && <Spinner className="ml-2 inline-block size-3.5" />}
           </span>
-          <div className="flex gap-2">
+          <div className="flex gap-1">
             <Button variant="ghost" size="sm" onClick={goToday}>Hôm nay</Button>
-            <Button variant="outline" size="sm" onClick={() => shift(3)}>3 tháng sau →</Button>
+            <Button variant="outline" size="sm" title="3 tháng sau" onClick={() => shift(3)}>→</Button>
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="flex flex-col gap-4">
           {months.map(m => (
-            <div key={toISO(m)} className="rounded-xl border border-border p-3">
+            <div key={toISO(m)} className="rounded-xl border border-border p-2">
               <div className="mb-2 text-center text-sm font-semibold">
                 Tháng {m.getMonth() + 1}/{m.getFullYear()}
               </div>
@@ -230,7 +230,7 @@ export function ToursCalendar() {
         </div>
       </div>
 
-      <aside className="w-full shrink-0 lg:w-80">
+      <aside className="min-w-0 flex-1">
         <div className="rounded-xl border border-border p-4">
           {selected ? (
             <>
