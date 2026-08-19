@@ -4,7 +4,7 @@ import { useForm } from '@refinedev/react-hook-form';
 import { useList, useNavigation } from '@refinedev/core';
 import { useController } from 'react-hook-form';
 import { supabase } from '@/lib/supabase';
-import { markdownImageKeys, slugifyTitle } from '@/lib/utils';
+import { formatDate, markdownImageKeys, slugifyTitle } from '@/lib/utils';
 import { ImageUpload } from '@/components/ImageUpload';
 import { MarkdownEditor } from '@/components/MarkdownEditor';
 import { BilingualField, EN_PLACEHOLDER } from '@/components/BilingualField';
@@ -56,11 +56,6 @@ function todayLocal(): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
-function formatDate(value: string | undefined): string {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.valueOf()) ? value : parsed.toLocaleDateString('vi-VN');
-}
 
 export function BlogForm({ mode }: { mode: 'create' | 'edit' }) {
   const { list, edit } = useNavigation();

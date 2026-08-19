@@ -4,6 +4,7 @@ import { createColumnHelper, getCoreRowModel } from '@tanstack/react-table';
 import { DataTable } from '@/components/DataTable';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { formatDate } from '@/lib/utils';
 
 interface BlogRow {
   id: number;
@@ -41,7 +42,7 @@ export function BlogList() {
     }),
     col.accessor('published_at', {
       header: 'Ngày đăng', size: 120,
-      cell: info => (info.getValue() ? new Date(info.getValue() as string).toLocaleDateString('vi-VN') : '—'),
+      cell: info => formatDate(info.getValue() as string | null),
     }),
     // Flags the two fields an English reader actually needs; long-form markdown
     // is deliberately not counted, matching how the tour list reports this.

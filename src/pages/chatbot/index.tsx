@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Plus, RefreshCw, Trash2, Upload, X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, formatDate } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { ConversationsTab } from './conversations';
 import { SimpleSelect } from '@/components/SimpleSelect';
@@ -510,7 +510,7 @@ export function ChatbotSettingsPage() {
                       {doc.status === 'ready' ? `${doc.chunk_count} đoạn` : '—'}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
-                      {new Date(doc.created_at).toLocaleDateString('vi-VN')}
+                      {formatDate(doc.created_at)}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-right">
                       {doc.status === 'error' && (

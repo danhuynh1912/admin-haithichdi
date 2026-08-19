@@ -7,7 +7,7 @@ import { Badge, badgeVariants } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/dialog';
 import { SimpleSelect } from '@/components/SimpleSelect';
-import { cn } from '@/lib/utils';
+import { cn, formatDate, formatDateTime } from '@/lib/utils';
 
 interface Booking {
   id: number;
@@ -51,9 +51,6 @@ const ALL = 'all';
 
 const statusVariant = (s: string) =>
   s === 'confirmed' ? 'success' : s === 'pending' ? 'warning' : 'destructive';
-
-const formatDate = (value: string | null) =>
-  value ? new Date(value).toLocaleDateString('vi-VN') : '—';
 
 const col = createColumnHelper<Booking>();
 
@@ -203,7 +200,7 @@ function BookingDetails({ booking }: { booking: Booking }) {
     ['Tên HCV', booking.medal_name || '—'],
     ['Ngày sinh', formatDate(booking.dob)],
     ['CCCD/CMND', booking.citizen_id || '—'],
-    ['Ngày đặt', new Date(booking.created_at).toLocaleString('vi-VN')],
+    ['Ngày đặt', formatDateTime(booking.created_at)],
   ];
 
   return (

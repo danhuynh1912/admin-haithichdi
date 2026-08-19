@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { SimpleSelect } from '@/components/SimpleSelect';
+import { formatDate } from '@/lib/utils';
 
 interface Tour {
   id: number;
@@ -132,8 +133,8 @@ export function TourList() {
   const columns = [
     col.accessor('id', { header: 'ID', size: 60 }),
     col.accessor('title', { header: 'Tên tour' }),
-    col.accessor('start_date', { header: 'Ngày đi', cell: i => i.getValue() ?? '—' }),
-    col.accessor('end_date', { header: 'Ngày về', cell: i => i.getValue() ?? '—' }),
+    col.accessor('start_date', { header: 'Ngày đi', cell: i => formatDate(i.getValue()) }),
+    col.accessor('end_date', { header: 'Ngày về', cell: i => formatDate(i.getValue()) }),
     col.accessor('price', { header: 'Giá', cell: i => i.getValue() ? Number(i.getValue()).toLocaleString('vi-VN') + '₫' : '—' }),
     col.accessor('max_guests', { header: 'Slot', size: 70 }),
     col.accessor('is_active', {

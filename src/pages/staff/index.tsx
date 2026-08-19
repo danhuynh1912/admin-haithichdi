@@ -9,6 +9,7 @@ import { deleteStaff } from '@/lib/adminApi';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { formatDate } from '@/lib/utils';
 
 interface StaffAccount {
   id: string;
@@ -72,7 +73,7 @@ export function StaffList() {
     col.accessor('years_experience', { header: 'Kinh nghiệm', size: 110, cell: i => `${i.getValue() ?? 0} năm` }),
     col.accessor('last_sign_in_at', {
       header: 'Đăng nhập gần nhất', size: 150,
-      cell: i => i.getValue() ? new Date(i.getValue() as string).toLocaleDateString('vi-VN') : '—',
+      cell: i => formatDate(i.getValue() as string | null),
     }),
     col.accessor('is_active', {
       header: 'Active', size: 80,

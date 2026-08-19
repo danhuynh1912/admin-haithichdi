@@ -23,6 +23,25 @@ export function slugifyTitle(value: string): string {
     .replace(/-+$/g, '');
 }
 
+/** Date (or date-time) value → `29/08/2026`. Falsy → em dash, unparseable → as-is. */
+export function formatDate(value: string | null | undefined): string {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.valueOf())) return value;
+  return parsed.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+/** Date-time value → `29/08/2026 14:05`. Falsy → em dash, unparseable → as-is. */
+export function formatDateTime(value: string | null | undefined): string {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.valueOf())) return value;
+  return parsed.toLocaleString('vi-VN', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
 /** S3 keys referenced by `![alt](key)` in a markdown body. */
 export function markdownImageKeys(markdown: string): string[] {
   const keys = new Set<string>();
