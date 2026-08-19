@@ -334,7 +334,21 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
                   <Input type="date" {...register('end_date')} />
                 </Field>
                 <Field label="Giá (VND)">
-                  <Input type="number" {...register('price')} />
+                  <div className="flex gap-2">
+                    <Input type="number" {...register('price')} />
+                    {route?.default_price != null && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 shrink-0"
+                        title="Điền giá mặc định của cung vào tour này"
+                        onClick={() => setValue('price', String(route.default_price), { shouldDirty: true })}
+                      >
+                        Lấy giá cung · {Number(route.default_price).toLocaleString('vi-VN')}₫
+                      </Button>
+                    )}
+                  </div>
                 </Field>
                 <Field label="Active">
                   <label className="flex items-center gap-2 pt-2 cursor-pointer">
