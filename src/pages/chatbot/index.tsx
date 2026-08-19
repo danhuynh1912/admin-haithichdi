@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Plus, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Plus, RefreshCw, Trash2, Upload, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { SimpleSelect } from '@/components/SimpleSelect';
 import { Button } from '@/components/ui/button';
@@ -34,6 +34,26 @@ interface UsageToday {
   outputTokens: number;
 }
 
+interface ChatbotDocument {
+  id: number;
+  filename: string;
+  storage_path: string;
+  status: 'pending' | 'processing' | 'ready' | 'error';
+  error: string;
+  chunk_count: number;
+  created_at: string;
+}
+
+const DOCS_BUCKET = 'chatbot-docs';
+const MAX_DOC_BYTES = 1024 * 1024; // khớp giới hạn trong chatbot-ingest
+
+const STATUS_LABEL: Record<ChatbotDocument['status'], { text: string; cls: string }> = {
+  pending: { text: 'Chờ xử lý', cls: 'bg-muted text-muted-foreground' },
+  processing: { text: 'Đang xử lý…', cls: 'bg-amber-100 text-amber-700' },
+  ready: { text: 'Sẵn sàng', cls: 'bg-emerald-100 text-emerald-700' },
+  error: { text: 'Lỗi', cls: 'bg-red-100 text-red-700' },
+};
+
 const MODEL_OPTIONS = [
   { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 — nhanh, rẻ (khuyên dùng)' },
   { value: 'claude-sonnet-5', label: 'Claude Sonnet 5 — thông minh hơn, đắt hơn ~3×' },
@@ -63,6 +83,18 @@ export function ChatbotSettingsPage() {
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [saveError, setSaveError] = useState('');
+  const [docs, setDocs] = useState<ChatbotDocument[]>([]);
+  const [docBusy, setDocBusy] = useState(false);
+  const [docError, setDocError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function loadDocs() {
+    const { data } = await supabase
+      .from('chatbot_documents')
+      .select('*')
+      .order('created_at', { ascending: false });
+    setDocs(data ?? []);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -109,10 +141,81 @@ export function ChatbotSettingsPage() {
       });
     })();
 
+    loadDocs();
+
     return () => {
       cancelled = true;
     };
   }, []);
+
+  async function handleUpload(file: File) {
+    setDocError('');
+    const lower = file.name.toLowerCase();
+    if (!lower.endsWith('.md') && !lower.endsWith('.txt')) {
+      setDocError('Chỉ hỗ trợ file .md hoặc .txt (PDF hãy chuyển sang .md trước).');
+      return;
+    }
+    if (file.size > MAX_DOC_BYTES) {
+      setDocError('File tối đa 1MB — hãy tách nhỏ tài liệu.');
+      return;
+    }
+
+    setDocBusy(true);
+    try {
+      // Tên object ngẫu nhiên để không đụng nhau; tên gốc giữ ở cột filename
+      const path = `${crypto.randomUUID()}-${file.name.replace(/[^\w.\-]+/g, '_')}`;
+      const { error: uploadError } = await supabase.storage
+        .from(DOCS_BUCKET)
+        .upload(path, file);
+      if (uploadError) throw new Error(uploadError.message);
+
+      const { data: row, error: insertError } = await supabase
+        .from('chatbot_documents')
+        .insert({ filename: file.name, storage_path: path })
+        .select('id')
+        .single();
+      if (insertError || !row) throw new Error(insertError?.message ?? 'insert failed');
+
+      // Ingest chạy đồng bộ — xong là status đã thành ready/error
+      const { error: fnError } = await supabase.functions.invoke('chatbot-ingest', {
+        body: { documentId: row.id },
+      });
+      if (fnError) throw new Error(fnError.message);
+    } catch (e) {
+      setDocError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDocBusy(false);
+      await loadDocs();
+    }
+  }
+
+  async function handleRetry(doc: ChatbotDocument) {
+    setDocBusy(true);
+    setDocError('');
+    const { error: fnError } = await supabase.functions.invoke('chatbot-ingest', {
+      body: { documentId: doc.id },
+    });
+    if (fnError) setDocError(fnError.message);
+    setDocBusy(false);
+    await loadDocs();
+  }
+
+  async function handleDelete(doc: ChatbotDocument) {
+    if (!window.confirm(`Xoá "${doc.filename}"? Chatbot sẽ không tra cứu tài liệu này nữa.`)) {
+      return;
+    }
+    setDocBusy(true);
+    setDocError('');
+    await supabase.storage.from(DOCS_BUCKET).remove([doc.storage_path]);
+    // Xoá row là chunks đi theo (FK cascade)
+    const { error: deleteError } = await supabase
+      .from('chatbot_documents')
+      .delete()
+      .eq('id', doc.id);
+    if (deleteError) setDocError(deleteError.message);
+    setDocBusy(false);
+    await loadDocs();
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -310,6 +413,99 @@ export function ChatbotSettingsPage() {
           </CardContent>
         </Card>
       </form>
+
+      <div className="mt-6 mb-2 flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold">Tài liệu tham khảo (RAG)</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Upload file .md/.txt (FAQ, chính sách, kinh nghiệm chuẩn bị…) — chatbot sẽ
+            trích đúng tài liệu để trả lời thay vì bịa.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {docBusy && <Spinner />}
+          <Button
+            type="button"
+            disabled={docBusy}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Upload className="size-4" /> Upload
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".md,.txt"
+            className="hidden"
+            onChange={e => {
+              const file = e.target.files?.[0];
+              if (file) handleUpload(file);
+              e.target.value = ''; // cho phép upload lại đúng file vừa chọn
+            }}
+          />
+        </div>
+      </div>
+      {docError && <p className="text-sm text-destructive mb-2">{docError}</p>}
+
+      <Card>
+        <CardContent className="p-0">
+          {docs.length === 0 ? (
+            <p className="p-6 text-sm text-muted-foreground">
+              Chưa có tài liệu nào. Chatbot hiện chỉ biết dữ liệu tour.
+            </p>
+          ) : (
+            <table className="w-full text-sm">
+              <tbody>
+                {docs.map(doc => (
+                  <tr key={doc.id} className="border-b last:border-b-0">
+                    <td className="px-4 py-3">
+                      <div className="font-medium">{doc.filename}</div>
+                      {doc.status === 'error' && doc.error && (
+                        <div className="text-xs text-destructive mt-0.5">{doc.error}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_LABEL[doc.status].cls}`}>
+                        {STATUS_LABEL[doc.status].text}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
+                      {doc.status === 'ready' ? `${doc.chunk_count} đoạn` : '—'}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
+                      {new Date(doc.created_at).toLocaleDateString('vi-VN')}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-right">
+                      {doc.status === 'error' && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          aria-label="Xử lý lại"
+                          disabled={docBusy}
+                          onClick={() => handleRetry(doc)}
+                        >
+                          <RefreshCw className="size-4" />
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        aria-label="Xoá tài liệu"
+                        disabled={docBusy}
+                        className="ml-2"
+                        onClick={() => handleDelete(doc)}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
