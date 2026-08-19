@@ -2,6 +2,7 @@ import { useTable } from '@refinedev/react-table';
 import { useDelete, useNavigation } from '@refinedev/core';
 import { createColumnHelper, getCoreRowModel } from '@tanstack/react-table';
 import { DataTable } from '@/components/DataTable';
+import { Pagination } from '@/components/Pagination';
 import { resolveMediaUrl } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 
@@ -46,7 +47,11 @@ export function LocationList() {
 
   const table = useTable({
     columns,
-    refineCoreProps: { resource: 'locations', sorters: { initial: [{ field: 'name', order: 'asc' }] } },
+    refineCoreProps: {
+      resource: 'locations',
+      sorters: { initial: [{ field: 'name', order: 'asc' }] },
+      pagination: { pageSize: 20 },
+    },
     // These columns have not been checked against what PostgREST can order by,
     // so the headers stay plain rather than offering a sort that may 400.
     enableSorting: false,
@@ -60,6 +65,7 @@ export function LocationList() {
         <Button onClick={() => create('locations')}>+ Thêm Location</Button>
       </div>
       <DataTable table={table} emptyText="Chưa có location nào." />
+      <Pagination table={table} unit="cung" />
     </div>
   );
 }
