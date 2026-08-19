@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useList, useNavigation } from '@refinedev/core';
+import { useDelete, useList, useNavigation } from '@refinedev/core';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -21,7 +21,9 @@ interface RouteOption {
   default_price: string | null;
 }
 
+const TOUR_SELECT = 'id,title,start_date,end_date,price,is_active,location_id';
 const WEEKDAYS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+const PAGE_SIZE = 10;
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -43,6 +45,7 @@ function monthCells(year: number, month: number): (Date | null)[] {
 
 export function ToursCalendar() {
   const { edit } = useNavigation();
+  const { mutate: del } = useDelete();
   const todayISO = toISO(new Date());
 
   // The window is anchored to the first of a month and always spans three
@@ -51,7 +54,9 @@ export function ToursCalendar() {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
-  const [selected, setSelected] = useState(todayISO);
+  // No day picked = browsing mode: the side panel lists every tour, paged.
+  const [selected, setSelected] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   const months = [0, 1, 2].map(i => new Date(anchor.getFullYear(), anchor.getMonth() + i, 1));
   const windowStart = toISO(months[0]);
@@ -60,7 +65,7 @@ export function ToursCalendar() {
   // Every tour that touches the window: it starts before the window closes and
   // ends after it opens. Undated tours have nothing to draw, and NULL fails
   // both comparisons, so they drop out here on their own.
-  const { query } = useList<CalendarTour>({
+  const { query: windowQuery } = useList<CalendarTour>({
     resource: 'tours',
     pagination: { pageSize: 1000 },
     filters: [
@@ -68,10 +73,23 @@ export function ToursCalendar() {
       { field: 'end_date', operator: 'gte', value: windowStart },
     ],
     sorters: [{ field: 'start_date', order: 'asc' }],
-    meta: { select: 'id,title,start_date,end_date,price,is_active,location_id' },
+    meta: { select: TOUR_SELECT },
   });
-  const tours = query?.data?.data ?? [];
-  const loading = query?.isLoading ?? false;
+  const windowTours = windowQuery?.data?.data ?? [];
+  const loading = windowQuery?.isLoading ?? false;
+
+  // The browsing list is its own paged query rather than a slice of the window:
+  // it must show every tour, including ones outside these three months and
+  // ones with no dates at all.
+  const { query: allQuery } = useList<CalendarTour>({
+    resource: 'tours',
+    pagination: { currentPage: page, pageSize: PAGE_SIZE },
+    sorters: [{ field: 'start_date', order: 'asc' }],
+    meta: { select: TOUR_SELECT },
+  });
+  const pageTours = allQuery?.data?.data ?? [];
+  const total = allQuery?.data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const { query: routesQuery } = useList<RouteOption>({
     resource: 'locations',
@@ -82,7 +100,7 @@ export function ToursCalendar() {
 
   const countByDay = useMemo(() => {
     const map = new Map<string, number>();
-    for (const t of tours) {
+    for (const t of windowTours) {
       if (!t.start_date || !t.end_date) continue;
       const end = new Date(`${t.end_date}T00:00:00`);
       for (const d = new Date(`${t.start_date}T00:00:00`); d <= end; d.setDate(d.getDate() + 1)) {
@@ -91,11 +109,11 @@ export function ToursCalendar() {
       }
     }
     return map;
-  }, [tours]);
+  }, [windowTours]);
 
-  const dayTours = tours.filter(
-    t => t.start_date && t.end_date && t.start_date <= selected && selected <= t.end_date,
-  );
+  const dayTours = selected
+    ? windowTours.filter(t => t.start_date && t.end_date && t.start_date <= selected && selected <= t.end_date)
+    : [];
 
   const shift = (by: number) => setAnchor(a => new Date(a.getFullYear(), a.getMonth() + by, 1));
   const goToday = () => {
@@ -109,6 +127,47 @@ export function ToursCalendar() {
     const inherited = routeById.get(t.location_id)?.default_price;
     return inherited ? `${Number(inherited).toLocaleString('vi-VN')}₫ · cung` : 'Chưa có giá';
   };
+
+  const tourCard = (t: CalendarTour) => (
+    <li key={t.id}>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => edit('tours', t.id)}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') edit('tours', t.id); }}
+        className="w-full cursor-pointer rounded-lg border border-border px-3 py-2 text-left transition-colors hover:border-primary/50 hover:bg-muted/50"
+      >
+        <div className="flex items-start justify-between gap-2">
+          <span className="text-sm font-semibold">{t.title}</span>
+          <Badge variant={t.is_active ? 'success' : 'secondary'}>
+            {t.is_active ? 'ON' : 'OFF'}
+          </Badge>
+        </div>
+        <div className="mt-1 text-xs text-muted-foreground">
+          {routeById.get(t.location_id)?.name ?? '—'}
+          {' · '}
+          {!t.start_date
+            ? 'Chưa có ngày'
+            : t.start_date === t.end_date
+              ? formatDate(t.start_date)
+              : `${formatDate(t.start_date)} → ${formatDate(t.end_date)}`}
+        </div>
+        <div className="mt-1 flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">{price(t)}</span>
+          <button
+            type="button"
+            onClick={e => {
+              e.stopPropagation();
+              if (confirm('Xóa tour này?')) del({ resource: 'tours', id: t.id });
+            }}
+            className="text-xs font-semibold text-destructive underline-offset-4 hover:underline"
+          >
+            Xóa
+          </button>
+        </div>
+      </div>
+    </li>
+  );
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row">
@@ -145,7 +204,7 @@ export function ToursCalendar() {
                     <button
                       key={i}
                       type="button"
-                      onClick={() => setSelected(key)}
+                      onClick={() => setSelected(prev => (prev === key ? null : key))}
                       title={count ? `${count} tour` : undefined}
                       className={cn(
                         'relative aspect-square rounded-md text-xs transition-colors',
@@ -173,39 +232,38 @@ export function ToursCalendar() {
 
       <aside className="w-full shrink-0 lg:w-80">
         <div className="rounded-xl border border-border p-4">
-          <h3 className="mb-3 text-sm font-bold">
-            Tour ngày {formatDate(selected)}
-            <span className="ml-2 font-normal text-muted-foreground">({dayTours.length})</span>
-          </h3>
-          {dayTours.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Không có tour nào diễn ra trong ngày này.</p>
+          {selected ? (
+            <>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h3 className="text-sm font-bold">
+                  Tour ngày {formatDate(selected)}
+                  <span className="ml-2 font-normal text-muted-foreground">({dayTours.length})</span>
+                </h3>
+                <Button variant="ghost" size="sm" onClick={() => setSelected(null)}>Bỏ chọn</Button>
+              </div>
+              {dayTours.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Không có tour nào diễn ra trong ngày này.</p>
+              ) : (
+                <ul className="flex flex-col gap-2">{dayTours.map(tourCard)}</ul>
+              )}
+            </>
           ) : (
-            <ul className="flex flex-col gap-2">
-              {dayTours.map(t => (
-                <li key={t.id}>
-                  <button
-                    type="button"
-                    onClick={() => edit('tours', t.id)}
-                    className="w-full rounded-lg border border-border px-3 py-2 text-left transition-colors hover:border-primary/50 hover:bg-muted/50"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-sm font-semibold">{t.title}</span>
-                      <Badge variant={t.is_active ? 'success' : 'secondary'}>
-                        {t.is_active ? 'ON' : 'OFF'}
-                      </Badge>
-                    </div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {routeById.get(t.location_id)?.name ?? '—'}
-                      {' · '}
-                      {t.start_date === t.end_date
-                        ? formatDate(t.start_date)
-                        : `${formatDate(t.start_date)} → ${formatDate(t.end_date)}`}
-                    </div>
-                    <div className="mt-0.5 text-xs text-muted-foreground">{price(t)}</div>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <>
+              <h3 className="mb-3 text-sm font-bold">
+                Tất cả tour
+                <span className="ml-2 font-normal text-muted-foreground">({total})</span>
+              </h3>
+              {pageTours.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Chưa có tour nào.</p>
+              ) : (
+                <ul className="flex flex-col gap-2">{pageTours.map(tourCard)}</ul>
+              )}
+              <div className="mt-3 flex items-center justify-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setPage(p => p - 1)} disabled={page <= 1}>←</Button>
+                <span className="text-xs text-muted-foreground">Trang {page} / {pageCount}</span>
+                <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page >= pageCount}>→</Button>
+              </div>
+            </>
           )}
         </div>
       </aside>
