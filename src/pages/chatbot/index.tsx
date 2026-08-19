@@ -47,7 +47,7 @@ interface ChatbotDocument {
 const DOCS_BUCKET = 'chatbot-docs';
 // Khớp giới hạn trong chatbot-ingest
 const MAX_TEXT_BYTES = 1024 * 1024;
-const MAX_PDF_BYTES = 5 * 1024 * 1024;
+const MAX_PDF_BYTES = 20 * 1024 * 1024;
 
 const STATUS_LABEL: Record<ChatbotDocument['status'], { text: string; cls: string }> = {
   pending: { text: 'Chờ xử lý', cls: 'bg-muted text-muted-foreground' },
@@ -159,7 +159,7 @@ export function ChatbotSettingsPage() {
       return;
     }
     if (file.size > (isPdf ? MAX_PDF_BYTES : MAX_TEXT_BYTES)) {
-      setDocError(isPdf ? 'PDF tối đa 5MB — hãy tách nhỏ tài liệu.' : 'File tối đa 1MB — hãy tách nhỏ tài liệu.');
+      setDocError(isPdf ? 'PDF tối đa 20MB — hãy tách nhỏ tài liệu.' : 'File tối đa 1MB — hãy tách nhỏ tài liệu.');
       return;
     }
 
