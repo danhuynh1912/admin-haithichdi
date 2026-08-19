@@ -18,6 +18,7 @@ import { BlogForm } from '@/pages/blogs/form';
 import { BlogTagList } from '@/pages/blog-tags';
 import { StaffList } from '@/pages/staff';
 import { StaffForm } from '@/pages/staff/form';
+import { ChatbotSettingsPage } from '@/pages/chatbot';
 
 export default function App() {
   return (
@@ -75,6 +76,7 @@ export default function App() {
             <Route path="/blogs/create" element={<RequireAdmin><BlogForm mode="create" /></RequireAdmin>} />
             <Route path="/blogs/edit/:id" element={<RequireAdmin><BlogForm mode="edit" /></RequireAdmin>} />
             <Route path="/blog-tags" element={<RequireAdmin><BlogTagList /></RequireAdmin>} />
+            <Route path="/chatbot" element={<RequireAdmin><ChatbotSettingsPage /></RequireAdmin>} />
             <Route path="/staff" element={<RequireAdmin><StaffList /></RequireAdmin>} />
             <Route path="/staff/create" element={<RequireAdmin><StaffForm mode="create" /></RequireAdmin>} />
             <Route path="/staff/edit/:id" element={<RequireAdmin><StaffForm mode="edit" /></RequireAdmin>} />

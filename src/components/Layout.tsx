@@ -1,6 +1,6 @@
 import { useLogout } from '@refinedev/core';
 import { NavLink, Outlet } from 'react-router-dom';
-import { MapPin, Mountain, ClipboardList, Users, Newspaper, LogOut } from 'lucide-react';
+import { MapPin, Mountain, ClipboardList, Users, Newspaper, BotMessageSquare, LogOut } from 'lucide-react';
 import { useRole } from '@/components/RequireAdmin';
 
 const NAV = [
@@ -8,6 +8,7 @@ const NAV = [
   { to: '/tours', label: 'Tours', icon: Mountain, adminOnly: true },
   { to: '/bookings', label: 'Bookings', icon: ClipboardList, adminOnly: false },
   { to: '/blogs', label: 'Blog', icon: Newspaper, adminOnly: true },
+  { to: '/chatbot', label: 'Chatbot', icon: BotMessageSquare, adminOnly: true },
   { to: '/staff', label: 'Tài khoản', icon: Users, adminOnly: true },
 ];
 
