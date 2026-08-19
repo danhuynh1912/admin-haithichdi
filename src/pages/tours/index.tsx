@@ -27,6 +27,7 @@ interface Tour {
 interface RouteOption {
   id: number;
   name: string;
+  default_price: string | null;
 }
 
 /** Today as `YYYY-MM-DD`, which is how a `date` column compares in PostgREST. */
@@ -84,9 +85,10 @@ export function TourList() {
     resource: 'locations',
     pagination: { pageSize: 100 },
     sorters: [{ field: 'name', order: 'asc' }],
-    meta: { select: 'id, name' },
+    meta: { select: 'id, name, default_price' },
   });
   const routes = routesQuery?.data?.data ?? [];
+  const routeById = new Map(routes.map(r => [r.id, r]));
 
   const filters: CrudFilter[] = [];
   if (query) {
@@ -135,7 +137,19 @@ export function TourList() {
     col.accessor('title', { header: 'Tên tour' }),
     col.accessor('start_date', { header: 'Ngày đi', cell: i => formatDate(i.getValue()) }),
     col.accessor('end_date', { header: 'Ngày về', cell: i => formatDate(i.getValue()) }),
-    col.accessor('price', { header: 'Giá', cell: i => i.getValue() ? Number(i.getValue()).toLocaleString('vi-VN') + '₫' : '—' }),
+    // A tour with no price of its own inherits the route's default live (the
+    // tours_resolved view coalesces), so show that price rather than a blank.
+    col.accessor('price', {
+      header: 'Giá',
+      cell: i => {
+        const own = i.getValue();
+        if (own) return Number(own).toLocaleString('vi-VN') + '₫';
+        const inherited = routeById.get(i.row.original.location_id)?.default_price;
+        return inherited
+          ? <span className="text-muted-foreground">{Number(inherited).toLocaleString('vi-VN')}₫ · cung</span>
+          : '—';
+      },
+    }),
     col.accessor('max_guests', { header: 'Slot', size: 70 }),
     col.accessor('is_active', {
       header: 'Active', size: 80,

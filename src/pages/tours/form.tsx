@@ -167,11 +167,14 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
     if (isUntouched) setValue('title', autoTitle(route.name));
 
     setValue('max_guests', route.default_max_guests ?? 20);
-    if (route.default_price != null) setValue('price', String(route.default_price));
   }, [mode, route, routes, setValue, watch]);
 
   async function handleSubmitTour(data: TourFormData) {
-    const result = await onFinish(data) as { data?: { id: number } } | undefined;
+    // An empty price is how a tour inherits the route's price live (the
+    // tours_resolved view coalesces NULL to the route's default_price), so it
+    // must reach the DB as NULL — numeric columns reject ''.
+    const payload = { ...data, price: String(data.price ?? '').trim() === '' ? null : data.price };
+    const result = await onFinish(payload as never) as { data?: { id: number } } | undefined;
     // Saving stays on the record; a create still has to move to that record's
     // edit page, or pressing Lưu again would make a second tour.
     const created = result?.data?.id;
@@ -335,20 +338,31 @@ export function TourForm({ mode }: { mode: 'create' | 'edit' }) {
                 </Field>
                 <Field label="Giá (VND)">
                   <div className="flex gap-2">
-                    <Input type="number" {...register('price')} />
-                    {route?.default_price != null && (
+                    <Input
+                      type="number"
+                      {...register('price')}
+                      placeholder={route?.default_price != null
+                        ? `Đang lấy từ cung · ${Number(route.default_price).toLocaleString('vi-VN')}`
+                        : undefined}
+                    />
+                    {route?.default_price != null && String(watch('price') ?? '').trim() !== '' && (
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         className="h-9 shrink-0"
-                        title="Điền giá mặc định của cung vào tour này"
-                        onClick={() => setValue('price', String(route.default_price), { shouldDirty: true })}
+                        title="Xoá giá riêng, quay lại kế thừa giá của cung"
+                        onClick={() => setValue('price', '', { shouldDirty: true })}
                       >
-                        Lấy giá cung · {Number(route.default_price).toLocaleString('vi-VN')}₫
+                        Dùng lại giá cung
                       </Button>
                     )}
                   </div>
+                  {route?.default_price != null && String(watch('price') ?? '').trim() === '' && (
+                    <span className="text-xs text-muted-foreground">
+                      Đang lấy từ cung · {Number(route.default_price).toLocaleString('vi-VN')}₫ — cung đổi giá thì tour đổi theo. Nhập số để ghi đè riêng cho tour này.
+                    </span>
+                  )}
                 </Field>
                 <Field label="Active">
                   <label className="flex items-center gap-2 pt-2 cursor-pointer">
