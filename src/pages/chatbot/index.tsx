@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Plus, RefreshCw, Trash2, Upload, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import { ConversationsTab } from './conversations';
 import { SimpleSelect } from '@/components/SimpleSelect';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -77,7 +79,15 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
+const TABS = [
+  { key: 'settings', label: 'Cấu hình' },
+  { key: 'conversations', label: 'Hội thoại' },
+] as const;
+
+type TabKey = (typeof TABS)[number]['key'];
+
 export function ChatbotSettingsPage() {
+  const [tab, setTab] = useState<TabKey>('settings');
   const { saved, flash } = useSavedFlash();
   const [settings, setSettings] = useState<ChatbotSettings | null>(null);
   const [usage, setUsage] = useState<UsageToday | null>(null);
@@ -277,21 +287,43 @@ export function ChatbotSettingsPage() {
     : null;
 
   return (
-    <div className="p-6 max-w-3xl">
-      <div className="flex items-center justify-between mb-4">
+    <div className={cn('p-6', tab === 'settings' ? 'max-w-3xl' : 'max-w-6xl')}>
+      <div className="flex items-center justify-between mb-3">
         <h1 className="text-2xl font-bold">Chatbot</h1>
-        <label className="flex items-center gap-2 text-sm font-medium cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={settings.enabled}
-            onChange={e => patch({ enabled: e.target.checked })}
-            className="size-4 accent-primary"
-          />
-          {settings.enabled ? 'Đang bật' : 'Đang tắt'}
-        </label>
+        {tab === 'settings' && (
+          <label className="flex items-center gap-2 text-sm font-medium cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={settings.enabled}
+              onChange={e => patch({ enabled: e.target.checked })}
+              className="size-4 accent-primary"
+            />
+            {settings.enabled ? 'Đang bật' : 'Đang tắt'}
+          </label>
+        )}
       </div>
 
-      {usage && (
+      <div className="flex gap-1 border-b mb-4">
+        {TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setTab(key)}
+            className={cn(
+              'px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+              tab === key
+                ? 'border-primary text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'conversations' && <ConversationsTab />}
+
+      {tab === 'settings' && usage && (
         <div className="mb-4 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
           <span>Hôm nay: <b className="text-foreground">{usage.userMessages}</b> tin nhắn</span>
           <span><b className="text-foreground">{(usage.inputTokens + usage.outputTokens).toLocaleString('vi-VN')}</b> token</span>
@@ -301,6 +333,8 @@ export function ChatbotSettingsPage() {
         </div>
       )}
 
+      {tab === 'settings' && (
+      <>
       <form onSubmit={handleSubmit}>
         <Card>
           <CardContent className="p-6 flex flex-col gap-6">
@@ -510,6 +544,8 @@ export function ChatbotSettingsPage() {
           )}
         </CardContent>
       </Card>
+      </>
+      )}
     </div>
   );
 }
