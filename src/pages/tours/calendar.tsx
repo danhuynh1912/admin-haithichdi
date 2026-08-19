@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { useDelete, useList, useNavigation } from '@refinedev/core';
+import { useDelete, useList, useNavigation, type CrudFilter } from '@refinedev/core';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { SimpleSelect } from '@/components/SimpleSelect';
 import { cn, formatDate } from '@/lib/utils';
 
 interface CalendarTour {
@@ -24,6 +25,9 @@ interface RouteOption {
 const TOUR_SELECT = 'id,title,start_date,end_date,price,is_active,location_id';
 const WEEKDAYS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 const PAGE_SIZE = 10;
+
+/** "No filter" as a real value — a blank one reads as nothing chosen. */
+const ALL = 'all';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -57,10 +61,17 @@ export function ToursCalendar() {
   // No day picked = browsing mode: the side panel lists every tour, paged.
   const [selected, setSelected] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [routeId, setRouteId] = useState(ALL);
 
   const months = [0, 1, 2].map(i => new Date(anchor.getFullYear(), anchor.getMonth() + i, 1));
   const windowStart = toISO(months[0]);
   const windowEnd = toISO(new Date(anchor.getFullYear(), anchor.getMonth() + 3, 0));
+
+  // Narrowing to one route has to reach the calendar too, not just the list:
+  // day highlights that still counted every route would point at days the
+  // filtered list then shows as empty.
+  const routeFilter: CrudFilter[] =
+    routeId === ALL ? [] : [{ field: 'location_id', operator: 'eq', value: Number(routeId) }];
 
   // Every tour that touches the window: it starts before the window closes and
   // ends after it opens. Undated tours have nothing to draw, and NULL fails
@@ -71,6 +82,7 @@ export function ToursCalendar() {
     filters: [
       { field: 'start_date', operator: 'lte', value: windowEnd },
       { field: 'end_date', operator: 'gte', value: windowStart },
+      ...routeFilter,
     ],
     sorters: [{ field: 'start_date', order: 'asc' }],
     meta: { select: TOUR_SELECT },
@@ -84,6 +96,7 @@ export function ToursCalendar() {
   const { query: allQuery } = useList<CalendarTour>({
     resource: 'tours',
     pagination: { currentPage: page, pageSize: PAGE_SIZE },
+    filters: routeFilter,
     sorters: [{ field: 'start_date', order: 'asc' }],
     meta: { select: TOUR_SELECT },
   });
@@ -94,9 +107,11 @@ export function ToursCalendar() {
   const { query: routesQuery } = useList<RouteOption>({
     resource: 'locations',
     pagination: { pageSize: 100 },
+    sorters: [{ field: 'name', order: 'asc' }],
     meta: { select: 'id, name, default_price' },
   });
-  const routeById = new Map((routesQuery?.data?.data ?? []).map(r => [r.id, r]));
+  const routes = routesQuery?.data?.data ?? [];
+  const routeById = new Map(routes.map(r => [r.id, r]));
 
   const countByDay = useMemo(() => {
     const map = new Map<string, number>();
@@ -189,6 +204,24 @@ export function ToursCalendar() {
   return (
     <div className="flex flex-col gap-4 lg:flex-row">
       <div className="w-full shrink-0 lg:w-[270px]">
+        {/* Sits above the months because it narrows the calendar as well as the
+            list — putting it over the table alone would imply otherwise. */}
+        <SimpleSelect
+          ariaLabel="Lọc theo cung"
+          value={routeId}
+          onValueChange={next => {
+            setRouteId(next);
+            // The old page number rarely exists in the narrowed result, and
+            // page 3 of a 1-page list reads as "no tours".
+            setPage(1);
+          }}
+          options={[
+            { value: ALL, label: 'Tất cả cung' },
+            ...routes.map(r => ({ value: String(r.id), label: r.name })),
+          ]}
+          className="mb-3 w-full"
+        />
+
         <div className="mb-3 flex items-center justify-between gap-1">
           <Button variant="outline" size="sm" title="3 tháng trước" onClick={() => shift(-3)}>←</Button>
           <span className="text-sm font-semibold">
@@ -262,10 +295,13 @@ export function ToursCalendar() {
         ) : (
           <>
             <h3 className="mb-3 text-sm font-bold">
-              Tất cả tour
+              {routeId === ALL ? 'Tất cả tour' : `Tour cung ${routeById.get(Number(routeId))?.name ?? ''}`}
               <span className="ml-2 font-normal text-muted-foreground">({total})</span>
             </h3>
-            {toursTable(pageTours, 'Chưa có tour nào.')}
+            {toursTable(
+              pageTours,
+              routeId === ALL ? 'Chưa có tour nào.' : 'Cung này chưa có tour nào.',
+            )}
             <div className="mt-3 flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => setPage(p => p - 1)} disabled={page <= 1}>←</Button>
               <span className="text-xs text-muted-foreground">Trang {page} / {pageCount}</span>
