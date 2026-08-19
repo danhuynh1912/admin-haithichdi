@@ -67,9 +67,6 @@ export function ToursCalendar() {
   const windowStart = toISO(months[0]);
   const windowEnd = toISO(new Date(anchor.getFullYear(), anchor.getMonth() + 3, 0));
 
-  // Narrowing to one route has to reach the calendar too, not just the list:
-  // day highlights that still counted every route would point at days the
-  // filtered list then shows as empty.
   const routeFilter: CrudFilter[] =
     routeId === ALL ? [] : [{ field: 'location_id', operator: 'eq', value: Number(routeId) }];
 
@@ -79,10 +76,12 @@ export function ToursCalendar() {
   const { query: windowQuery } = useList<CalendarTour>({
     resource: 'tours',
     pagination: { pageSize: 1000 },
+    // Deliberately unfiltered by route: the calendar still needs to draw the
+    // days other routes depart on, dimmed, so filtering never looks like the
+    // schedule emptied out. The split happens client-side below.
     filters: [
       { field: 'start_date', operator: 'lte', value: windowEnd },
       { field: 'end_date', operator: 'gte', value: windowStart },
-      ...routeFilter,
     ],
     sorters: [{ field: 'start_date', order: 'asc' }],
     meta: { select: TOUR_SELECT },
@@ -113,9 +112,10 @@ export function ToursCalendar() {
   const routes = routesQuery?.data?.data ?? [];
   const routeById = new Map(routes.map(r => [r.id, r]));
 
-  const countByDay = useMemo(() => {
+  /** Tally how many of `list` run on each day it covers, start through end. */
+  const tally = (list: CalendarTour[]) => {
     const map = new Map<string, number>();
-    for (const t of windowTours) {
+    for (const t of list) {
       if (!t.start_date || !t.end_date) continue;
       const end = new Date(`${t.end_date}T00:00:00`);
       for (const d = new Date(`${t.start_date}T00:00:00`); d <= end; d.setDate(d.getDate() + 1)) {
@@ -124,10 +124,29 @@ export function ToursCalendar() {
       }
     }
     return map;
-  }, [windowTours]);
+  };
+
+  // Two tallies while a route is picked: days that route departs on stay fully
+  // highlighted and clickable, days belonging only to other routes stay visible
+  // but dimmed and inert — the shape of the month is still readable.
+  const { countByDay, mutedByDay } = useMemo(() => {
+    if (routeId === ALL) return { countByDay: tally(windowTours), mutedByDay: new Map<string, number>() };
+    const picked = Number(routeId);
+    const mine = windowTours.filter(t => t.location_id === picked);
+    const others = windowTours.filter(t => t.location_id !== picked);
+    return { countByDay: tally(mine), mutedByDay: tally(others) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowTours, routeId]);
 
   const dayTours = selected
-    ? windowTours.filter(t => t.start_date && t.end_date && t.start_date <= selected && selected <= t.end_date)
+    ? windowTours.filter(
+        t =>
+          t.start_date &&
+          t.end_date &&
+          t.start_date <= selected &&
+          selected <= t.end_date &&
+          (routeId === ALL || t.location_id === Number(routeId)),
+      )
     : [];
 
   const shift = (by: number) => setAnchor(a => new Date(a.getFullYear(), a.getMonth() + by, 1));
@@ -204,24 +223,6 @@ export function ToursCalendar() {
   return (
     <div className="flex flex-col gap-4 lg:flex-row">
       <div className="w-full shrink-0 lg:w-[270px]">
-        {/* Sits above the months because it narrows the calendar as well as the
-            list — putting it over the table alone would imply otherwise. */}
-        <SimpleSelect
-          ariaLabel="Lọc theo cung"
-          value={routeId}
-          onValueChange={next => {
-            setRouteId(next);
-            // The old page number rarely exists in the narrowed result, and
-            // page 3 of a 1-page list reads as "no tours".
-            setPage(1);
-          }}
-          options={[
-            { value: ALL, label: 'Tất cả cung' },
-            ...routes.map(r => ({ value: String(r.id), label: r.name })),
-          ]}
-          className="mb-3 w-full"
-        />
-
         <div className="mb-3 flex items-center justify-between gap-1">
           <Button variant="outline" size="sm" title="3 tháng trước" onClick={() => shift(-3)}>←</Button>
           <span className="text-sm font-semibold">
@@ -250,17 +251,23 @@ export function ToursCalendar() {
                   if (!d) return <span key={i} />;
                   const key = toISO(d);
                   const count = countByDay.get(key) ?? 0;
+                  // Only reachable when the picked route has nothing that day:
+                  // a day belonging to other routes is shown, but leads nowhere.
+                  const muted = count === 0 ? (mutedByDay.get(key) ?? 0) : 0;
                   return (
                     <button
                       key={i}
                       type="button"
+                      disabled={muted > 0}
                       onClick={() => setSelected(prev => (prev === key ? null : key))}
-                      title={count ? `${count} tour` : undefined}
+                      title={
+                        count ? `${count} tour` : muted ? `${muted} tour của cung khác` : undefined
+                      }
                       className={cn(
                         'relative aspect-square rounded-md text-xs transition-colors',
-                        count > 0
-                          ? 'bg-primary/15 font-semibold text-primary hover:bg-primary/25'
-                          : 'text-foreground/70 hover:bg-muted',
+                        count > 0 && 'bg-primary/15 font-semibold text-primary hover:bg-primary/25',
+                        muted > 0 && 'bg-muted/60 text-muted-foreground/60 saturate-0 cursor-not-allowed',
+                        count === 0 && muted === 0 && 'text-foreground/70 hover:bg-muted',
                         selected === key && 'ring-2 ring-primary',
                         todayISO === key && selected !== key && 'ring-1 ring-border',
                       )}
@@ -281,6 +288,23 @@ export function ToursCalendar() {
       </div>
 
       <aside className="min-w-0 flex-1">
+        {/* Narrows the calendar as well as the table below it. */}
+        <SimpleSelect
+          ariaLabel="Lọc theo cung"
+          value={routeId}
+          onValueChange={next => {
+            setRouteId(next);
+            // The old page number rarely exists in the narrowed result, and
+            // page 3 of a 1-page list reads as "no tours".
+            setPage(1);
+          }}
+          options={[
+            { value: ALL, label: 'Tất cả cung' },
+            ...routes.map(r => ({ value: String(r.id), label: r.name })),
+          ]}
+          className="mb-3"
+        />
+
         {selected ? (
           <>
             <div className="mb-3 flex items-center justify-between gap-2">
