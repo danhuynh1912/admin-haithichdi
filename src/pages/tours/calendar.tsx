@@ -128,45 +128,62 @@ export function ToursCalendar() {
     return inherited ? `${Number(inherited).toLocaleString('vi-VN')}₫ · cung` : 'Chưa có giá';
   };
 
-  const tourCard = (t: CalendarTour) => (
-    <li key={t.id}>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => edit('tours', t.id)}
-        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') edit('tours', t.id); }}
-        className="w-full cursor-pointer rounded-lg border border-border px-3 py-2 text-left transition-colors hover:border-primary/50 hover:bg-muted/50"
-      >
-        <div className="flex items-start justify-between gap-2">
-          <span className="text-sm font-semibold">{t.title}</span>
-          <Badge variant={t.is_active ? 'success' : 'secondary'}>
-            {t.is_active ? 'ON' : 'OFF'}
-          </Badge>
-        </div>
-        <div className="mt-1 text-xs text-muted-foreground">
-          {routeById.get(t.location_id)?.name ?? '—'}
-          {' · '}
-          {!t.start_date
-            ? 'Chưa có ngày'
-            : t.start_date === t.end_date
-              ? formatDate(t.start_date)
-              : `${formatDate(t.start_date)} → ${formatDate(t.end_date)}`}
-        </div>
-        <div className="mt-1 flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">{price(t)}</span>
-          <button
-            type="button"
-            onClick={e => {
-              e.stopPropagation();
-              if (confirm('Xóa tour này?')) del({ resource: 'tours', id: t.id });
-            }}
-            className="text-xs font-semibold text-destructive underline-offset-4 hover:underline"
-          >
-            Xóa
-          </button>
-        </div>
-      </div>
-    </li>
+  const toursTable = (list: CalendarTour[], emptyText: string) => (
+    <div className="overflow-x-auto rounded-lg border bg-card">
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr className="bg-muted/50">
+            {['Tên tour', 'Cung', 'Ngày đi', 'Ngày về', 'Giá', 'Active', ''].map((h, i) => (
+              <th key={i} className="whitespace-nowrap px-4 py-3 text-left font-semibold text-muted-foreground">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {list.length === 0 && (
+            <tr>
+              <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">{emptyText}</td>
+            </tr>
+          )}
+          {list.map(t => (
+            <tr
+              key={t.id}
+              onClick={() => edit('tours', t.id)}
+              className="cursor-pointer border-t border-border transition-colors hover:bg-muted/30"
+            >
+              <td className="px-4 py-3 font-medium">{t.title}</td>
+              <td className="whitespace-nowrap px-4 py-3">{routeById.get(t.location_id)?.name ?? '—'}</td>
+              <td className="whitespace-nowrap px-4 py-3">{formatDate(t.start_date)}</td>
+              <td className="whitespace-nowrap px-4 py-3">{formatDate(t.end_date)}</td>
+              <td className="whitespace-nowrap px-4 py-3">{price(t)}</td>
+              <td className="px-4 py-3">
+                <Badge variant={t.is_active ? 'success' : 'secondary'}>{t.is_active ? 'ON' : 'OFF'}</Badge>
+              </td>
+              <td className="whitespace-nowrap px-4 py-3 text-right">
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={e => { e.stopPropagation(); edit('tours', t.id); }}
+                  >
+                    Sửa
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={e => {
+                      e.stopPropagation();
+                      if (confirm('Xóa tour này?')) del({ resource: 'tours', id: t.id });
+                    }}
+                  >
+                    Xóa
+                  </Button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 
   return (
@@ -231,41 +248,31 @@ export function ToursCalendar() {
       </div>
 
       <aside className="min-w-0 flex-1">
-        <div className="rounded-xl border border-border p-4">
-          {selected ? (
-            <>
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <h3 className="text-sm font-bold">
-                  Tour ngày {formatDate(selected)}
-                  <span className="ml-2 font-normal text-muted-foreground">({dayTours.length})</span>
-                </h3>
-                <Button variant="ghost" size="sm" onClick={() => setSelected(null)}>Bỏ chọn</Button>
-              </div>
-              {dayTours.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Không có tour nào diễn ra trong ngày này.</p>
-              ) : (
-                <ul className="flex flex-col gap-2">{dayTours.map(tourCard)}</ul>
-              )}
-            </>
-          ) : (
-            <>
-              <h3 className="mb-3 text-sm font-bold">
-                Tất cả tour
-                <span className="ml-2 font-normal text-muted-foreground">({total})</span>
+        {selected ? (
+          <>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h3 className="text-sm font-bold">
+                Tour ngày {formatDate(selected)}
+                <span className="ml-2 font-normal text-muted-foreground">({dayTours.length})</span>
               </h3>
-              {pageTours.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Chưa có tour nào.</p>
-              ) : (
-                <ul className="flex flex-col gap-2">{pageTours.map(tourCard)}</ul>
-              )}
-              <div className="mt-3 flex items-center justify-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => setPage(p => p - 1)} disabled={page <= 1}>←</Button>
-                <span className="text-xs text-muted-foreground">Trang {page} / {pageCount}</span>
-                <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page >= pageCount}>→</Button>
-              </div>
-            </>
-          )}
-        </div>
+              <Button variant="ghost" size="sm" onClick={() => setSelected(null)}>Bỏ chọn</Button>
+            </div>
+            {toursTable(dayTours, 'Không có tour nào diễn ra trong ngày này.')}
+          </>
+        ) : (
+          <>
+            <h3 className="mb-3 text-sm font-bold">
+              Tất cả tour
+              <span className="ml-2 font-normal text-muted-foreground">({total})</span>
+            </h3>
+            {toursTable(pageTours, 'Chưa có tour nào.')}
+            <div className="mt-3 flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setPage(p => p - 1)} disabled={page <= 1}>←</Button>
+              <span className="text-xs text-muted-foreground">Trang {page} / {pageCount}</span>
+              <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page >= pageCount}>→</Button>
+            </div>
+          </>
+        )}
       </aside>
     </div>
   );
