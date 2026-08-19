@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { SimpleSelect } from '@/components/SimpleSelect';
 import { formatDate } from '@/lib/utils';
+import { ToursCalendar } from './calendar';
 
 interface Tour {
   id: number;
@@ -80,6 +81,16 @@ export function TourList() {
   const [period, setPeriod] = useState(ALL);
   const [i18n, setI18n] = useState(ALL);
   const query = useDebounced(search.trim());
+
+  // The flat table answers "what exists"; the calendar answers "what runs
+  // when". Remembered per browser so the preferred lens sticks.
+  const [view, setView] = useState<'table' | 'calendar'>(
+    () => (localStorage.getItem('tours-view') === 'calendar' ? 'calendar' : 'table'),
+  );
+  const switchView = (next: 'table' | 'calendar') => {
+    setView(next);
+    localStorage.setItem('tours-view', next);
+  };
 
   const { query: routesQuery } = useList<RouteOption>({
     resource: 'locations',
@@ -216,13 +227,35 @@ export function TourList() {
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold">🏔️ Tours</h2>
+        <div className="flex items-center gap-4">
+          <h2 className="text-xl font-bold">🏔️ Tours</h2>
+          <div className="flex rounded-lg border border-border p-0.5">
+            <Button
+              variant={view === 'table' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => switchView('table')}
+            >
+              Bảng
+            </Button>
+            <Button
+              variant={view === 'calendar' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => switchView('calendar')}
+            >
+              Lịch
+            </Button>
+          </div>
+        </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => navigate('/tours/bulk')}>Tạo nhiều tour</Button>
           <Button onClick={() => create('tours')}>+ Thêm Tour</Button>
         </div>
       </div>
 
+      {view === 'calendar' ? (
+        <ToursCalendar />
+      ) : (
+      <>
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <Input
           value={search}
@@ -284,6 +317,8 @@ export function TourList() {
         <span className="text-sm text-muted-foreground">Trang {currentPage} / {pageCount}</span>
         <Button variant="outline" size="sm" onClick={() => setCurrentPage(currentPage + 1)} disabled={currentPage >= pageCount}>→</Button>
       </div>
+      </>
+      )}
     </div>
   );
 }
