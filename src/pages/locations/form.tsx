@@ -228,24 +228,13 @@ export function LocationForm({
             </Field>
 
             <hr className="border-border" />
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Thư viện ảnh ({imgFields.length})
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Dùng chung cho mọi tour thuộc cung này — chỉ cần upload một lần.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => addImg({ image_path: '', image_url: '', caption: '', caption_en: '', sort_order: imgFields.length })}
-                className="border-dashed border-primary text-primary hover:text-primary"
-              >
-                + Thêm ảnh
-              </Button>
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Thư viện ảnh ({imgFields.length})
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Dùng chung cho mọi tour thuộc cung này — chỉ cần upload một lần.
+              </p>
             </div>
             {imgFields.map((field, i) => (
               <div key={field.id} className="border border-border rounded-lg p-3 flex gap-3 items-start">
@@ -274,7 +263,16 @@ export function LocationForm({
               </div>
             ))}
 
-            <hr className="border-border" />
+            {/* Below the list, not beside the heading: a route with a dozen
+                photos otherwise means scrolling back up to add the thirteenth. */}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => addImg({ image_path: '', image_url: '', caption: '', caption_en: '', sort_order: imgFields.length })}
+              className="w-full border-dashed border-primary text-primary hover:text-primary"
+            >
+              + Thêm ảnh
+            </Button>
 
             <hr className="border-border" />
             <div>

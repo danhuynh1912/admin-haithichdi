@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -61,12 +62,27 @@ export function SaveBar({
       <Button type="button" variant="outline" onClick={onCancel}>
         {cancelLabel}
       </Button>
-      {saved && (
-        <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600">
-          <Check className="size-4" />
-          Đã lưu
-        </span>
-      )}
+      {saved && <SavedToast />}
     </div>
+  );
+}
+
+/**
+ * The confirmation floats over the page rather than sitting beside the button.
+ * These forms run to several screens; a route with a gallery and an itinerary
+ * puts Lưu far below the fold, and an inline note there is read by nobody who
+ * saved with the keyboard or scrolled away while it was in flight.
+ */
+function SavedToast() {
+  return createPortal(
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed bottom-6 right-6 z-[100] inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg"
+    >
+      <Check className="size-4" />
+      Đã lưu
+    </div>,
+    document.body,
   );
 }
