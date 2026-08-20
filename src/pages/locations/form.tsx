@@ -383,16 +383,22 @@ export function LocationForm({
             <hr className="border-border" />
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Trang chủ</p>
 
-            <Field label="Thứ tự featured (1–4, để trống = không hiển thị)">
+            {/* No upper bound: this number orders the whole route carousel on
+                the home page, not just the four featured cards. The featured
+                block takes the first four of this same order. */}
+            <Field label="Thứ tự hiển thị ở trang chủ">
               <Input
                 type="number"
                 min={1}
-                max={4}
                 className="w-20"
                 {...register('home_feature_order', {
                   setValueAs: v => (v === '' || v === null ? null : Number(v)),
                 })}
               />
+              <span className="text-xs text-muted-foreground">
+                Số nhỏ hiện trước. Để trống thì cung xếp sau cùng theo thứ tự tên.
+                Bốn cung có số nhỏ nhất cũng là 4 thẻ “Cung nổi bật”.
+              </span>
             </Field>
 
             <SaveBar
