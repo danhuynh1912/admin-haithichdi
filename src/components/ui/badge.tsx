@@ -25,6 +25,10 @@ const badgeVariants = cva(
           "bg-emerald-600/10 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",
         warning:
           "bg-amber-500/15 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+        // Distinct from `warning`: a booking waiting on staff and one waiting
+        // on the customer must not look the same in the list.
+        info:
+          "bg-sky-500/15 text-sky-700 dark:bg-sky-500/20 dark:text-sky-400",
       },
     },
     defaultVariants: {

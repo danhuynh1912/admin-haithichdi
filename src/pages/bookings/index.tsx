@@ -1,10 +1,11 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useTable } from '@refinedev/react-table';
 import { useList, useUpdate, type CrudFilter } from '@refinedev/core';
 import { createColumnHelper, getCoreRowModel } from '@tanstack/react-table';
 import { DataTable } from '@/components/DataTable';
 import { Badge, badgeVariants } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/dialog';
 import { SimpleSelect } from '@/components/SimpleSelect';
 import { cn, formatDate, formatDateTime } from '@/lib/utils';
@@ -14,7 +15,9 @@ interface Booking {
   full_name: string;
   phone: string;
   email: string;
-  status: 'pending' | 'confirmed' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'needs_contact_check' | 'cancelled';
+  /** Staff's note about the status — the customer reads this one. */
+  status_note: string;
   medal_name: string | null;
   dob: string | null;
   citizen_id: string | null;
@@ -39,8 +42,12 @@ interface LocationOption {
 const STATUS_LABEL: Record<string, string> = {
   pending: 'Chờ xác nhận',
   confirmed: 'Đã xác nhận',
+  needs_contact_check: 'Cần xác nhận lại liên hệ',
   cancelled: 'Đã hủy',
 };
+
+/** The one status that carries a note the customer is meant to act on. */
+const NEEDS_CONTACT = 'needs_contact_check';
 
 // `tours!inner` is what makes the `tours.location_id` filter narrow the
 // bookings themselves rather than just blanking out the embed.
@@ -50,7 +57,10 @@ const SELECT_WITH_TOUR = '*, tours!inner(id, title, location_id, locations(id, n
 const ALL = 'all';
 
 const statusVariant = (s: string) =>
-  s === 'confirmed' ? 'success' : s === 'pending' ? 'warning' : 'destructive';
+  s === 'confirmed' ? 'success'
+  : s === 'pending' ? 'warning'
+  : s === NEEDS_CONTACT ? 'info'
+  : 'destructive';
 
 const col = createColumnHelper<Booking>();
 
@@ -100,7 +110,14 @@ export function BookingList() {
         return (
           <select
             value={info.getValue()}
-            onChange={e => update({ resource: 'bookings', id, values: { status: e.target.value } })}
+            onChange={e => {
+              const next = e.target.value;
+              update({ resource: 'bookings', id, values: { status: next } });
+              // This status is only half-entered without a note saying what to
+              // check, so picking it opens the booking on the note field
+              // rather than leaving the customer a bare "something is wrong".
+              if (next === NEEDS_CONTACT) setOpenId(id);
+            }}
             className={cn(
               badgeVariants({ variant: statusVariant(info.getValue()) }),
               'h-8 cursor-pointer appearance-none rounded-full px-3.5 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
@@ -213,11 +230,72 @@ function BookingDetails({ booking }: { booking: Booking }) {
           </div>
         ))}
       </dl>
+      <StatusNoteEditor booking={booking} />
+
       <div className="mt-4">
-        <p className="text-muted-foreground mb-1">Ghi chú</p>
+        <p className="text-muted-foreground mb-1">Ghi chú của khách</p>
         <p className="whitespace-pre-wrap rounded-md bg-muted/50 p-3">
           {booking.note?.trim() || '—'}
         </p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The note the customer sees under their booking status.
+ *
+ * Shown while the booking asks the customer to do something, and also whenever
+ * a note is already stored — otherwise moving the booking to another status
+ * would hide a message that is still on the customer's screen.
+ */
+function StatusNoteEditor({ booking }: { booking: Booking }) {
+  const { mutate: update } = useUpdate();
+  const [draft, setDraft] = useState(booking.status_note ?? '');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  // Reset when the modal moves to another booking: this component is not
+  // remounted between them.
+  useEffect(() => {
+    setDraft(booking.status_note ?? '');
+    setSaved(false);
+  }, [booking.id, booking.status_note]);
+
+  if (booking.status !== NEEDS_CONTACT && !booking.status_note?.trim()) return null;
+
+  const dirty = draft !== (booking.status_note ?? '');
+
+  return (
+    <div className="mt-4 rounded-md border border-sky-500/40 bg-sky-500/5 p-3">
+      <p className="font-medium">Ghi chú gửi khách</p>
+      <p className="text-xs text-muted-foreground mt-0.5">
+        Khách sẽ đọc được dòng này ngay dưới trạng thái, ở màn “Tour đã đặt”.
+        Ghi rõ cần kiểm tra lại gì — ví dụ số điện thoại sai một chữ số.
+      </p>
+      <textarea
+        value={draft}
+        onChange={e => { setDraft(e.target.value); setSaved(false); }}
+        rows={3}
+        placeholder="VD: Số 09xx xxx xxx gọi không liên lạc được, bạn kiểm tra lại giúp bọn mình nhé."
+        className="mt-2 w-full rounded-md border border-input bg-background p-2 text-sm"
+      />
+      <div className="mt-2 flex items-center gap-3">
+        <Button
+          type="button"
+          size="sm"
+          disabled={!dirty || saving}
+          onClick={() => {
+            setSaving(true);
+            update(
+              { resource: 'bookings', id: booking.id, values: { status_note: draft.trim() } },
+              { onSuccess: () => setSaved(true), onSettled: () => setSaving(false) },
+            );
+          }}
+        >
+          {saving ? <Spinner /> : 'Lưu ghi chú'}
+        </Button>
+        {saved && !dirty && <span className="text-xs text-emerald-600">Đã lưu</span>}
       </div>
     </div>
   );
