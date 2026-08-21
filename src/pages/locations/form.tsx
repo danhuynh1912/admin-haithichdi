@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from '@refinedev/react-hook-form';
 import { useInvalidate, useNavigation } from '@refinedev/core';
 import { Controller, useFieldArray } from 'react-hook-form';
+import type { FieldValues, UseFormRegister, UseFormSetValue } from 'react-hook-form';
 import { ImageUpload } from '@/components/ImageUpload';
-import { supabase } from '@/lib/supabase';
+import { supabase, resolveMediaUrl } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { Input } from '@/components/ui/input';
@@ -63,6 +64,23 @@ interface LocationFormData {
   home_feature_order: number | null;
 }
 
+/**
+ * Replaces a route's gallery with what the form holds.
+ *
+ * Wholesale rather than a diff: position in the form is the only definition of
+ * `sort_order`, so a reorder or a deletion rewrites the whole set anyway. Two
+ * requests, whatever the photo count.
+ */
+async function writeGallery(locationId: number, images: LocationImage[] | undefined) {
+  await supabase.from('location_images').delete().eq('location_id', locationId);
+  if (!images?.length) return;
+  await supabase.from('location_images').insert(
+    images
+      .filter(img => img.image_path?.trim() || img.image_url?.trim())
+      .map(({ id: _id, ...img }, i) => ({ ...img, location_id: locationId, sort_order: i })),
+  );
+}
+
 /** Drops blank rows and trims the rest, so the array matches what is shown. */
 function cleanLines(lines: string[] | undefined): string[] {
   return (lines ?? []).map(line => line.trim()).filter(Boolean);
@@ -113,8 +131,10 @@ export function LocationForm({
       : { resource: 'locations' },
   });
 
-  const { fields: imgFields, append: addImg, remove: removeImg } =
+  const { fields: imgFields, append: addImg, remove: removeImg, move: moveImg } =
     useFieldArray({ control, name: 'images' });
+  // Which photo the side panel is editing. Null until one is picked.
+  const [selectedImage, setSelectedImage] = useState<number | null>(null);
   const { fields: dayFields, append: addDay, remove: removeDay } =
     useFieldArray({ control, name: 'itinerary_days' });
 
@@ -148,6 +168,22 @@ export function LocationForm({
     })();
   }, [id, mode, setValue]);
 
+  // Dragging a photo only reorders form state — nothing is written until a save.
+  // This is the save for the gallery alone, so fixing an order does not mean
+  // pushing the whole route and scrolling to the bottom to do it.
+  const [savingGallery, setSavingGallery] = useState(false);
+  async function saveGalleryOnly() {
+    if (!id) return;
+    setSavingGallery(true);
+    try {
+      await writeGallery(id as number, watch('images'));
+      invalidate({ resource: 'location_images', invalidates: ['list'] });
+      flash();
+    } finally {
+      setSavingGallery(false);
+    }
+  }
+
   async function handleSubmitWithRelated(data: LocationFormData) {
     const { images, itinerary_days, ...locationData } = data;
     const result = await onFinish({
@@ -167,14 +203,7 @@ export function LocationForm({
     // Both are replaced wholesale: position in the form is what defines
     // sort_order and day_number, so a reorder or a deletion has to rewrite the
     // whole set anyway.
-    await supabase.from('location_images').delete().eq('location_id', locationId);
-    if (images?.length) {
-      await supabase.from('location_images').insert(
-        images
-          .filter(img => img.image_path?.trim() || img.image_url?.trim())
-          .map(({ id: _id, ...img }, i) => ({ ...img, location_id: locationId, sort_order: i })),
-      );
-    }
+    await writeGallery(locationId, images);
 
     await supabase.from('location_itinerary_days').delete().eq('location_id', locationId);
     if (itinerary_days?.length) {
@@ -247,51 +276,31 @@ export function LocationForm({
             </Field>
 
             <hr className="border-border" />
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                Thư viện ảnh ({imgFields.length})
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Dùng chung cho mọi tour thuộc cung này — chỉ cần upload một lần.
-              </p>
-            </div>
-            {imgFields.map((field, i) => (
-              <div key={field.id} className="border border-border rounded-lg p-3 flex gap-3 items-start">
-                <ImageUpload
-                  prefix="locations/images"
-                  currentPath={imageValues[i]?.image_path}
-                  currentUrl={imageValues[i]?.image_url}
-                  onUploaded={key => setValue(`images.${i}.image_path`, key)}
-                  field={register(`images.${i}.image_path`)}
-                />
-                <div className="flex-1 flex flex-col gap-2">
-                  <Input placeholder="Hoặc URL ngoài" {...register(`images.${i}.image_url`)} />
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input placeholder="Caption (VI)" {...register(`images.${i}.caption`)} />
-                    <Input placeholder="Caption (EN)" {...register(`images.${i}.caption_en`)} />
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeImg(i)}
-                  className="text-destructive text-lg p-1 bg-transparent border-none cursor-pointer"
-                  aria-label="Xoá ảnh"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-
-            {/* Below the list, not beside the heading: a route with a dozen
-                photos otherwise means scrolling back up to add the thirteenth. */}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => addImg({ image_path: '', image_url: '', caption: '', caption_en: '', sort_order: imgFields.length })}
-              className="w-full border-dashed border-primary text-primary hover:text-primary"
-            >
-              + Thêm ảnh
-            </Button>
+            <GalleryEditor
+              fields={imgFields}
+              values={imageValues}
+              selected={selectedImage}
+              onSelect={setSelectedImage}
+              onMove={moveImg}
+              onRemove={i => {
+                removeImg(i);
+                // Keep the panel pointing at a real photo: everything after the
+                // removed one shifts down by one.
+                setSelectedImage(current =>
+                  current === null || current < i ? current
+                  : current === i ? null
+                  : current - 1,
+                );
+              }}
+              onAdd={() => {
+                addImg({ image_path: '', image_url: '', caption: '', caption_en: '', sort_order: imgFields.length });
+                setSelectedImage(imgFields.length);
+              }}
+              register={register}
+              setValue={setValue}
+              onSave={mode === 'edit' && id ? saveGalleryOnly : undefined}
+              saving={savingGallery}
+            />
 
             <hr className="border-border" />
             <div>
@@ -553,5 +562,228 @@ function Shell({ embedded, children }: { embedded: boolean; children: React.Reac
     <Card>
       <CardContent className="pt-6">{children}</CardContent>
     </Card>
+  );
+}
+
+/** Photos that make up the header collage on the public tour/route page. */
+const HEADER_SLOTS = 4;
+
+/**
+ * The route's gallery as a grid rather than a stack of rows.
+ *
+ * A route with a dozen photos used to be a dozen full-width blocks, so the
+ * fields below it were a long scroll away. Here the photos are thumbnails and
+ * only the selected one shows its fields, which keeps the whole gallery to a
+ * fixed patch of the page however many photos it holds.
+ *
+ * Order is the point of the grid: the public page builds its header collage
+ * from the first four photos, so dragging one into the first four is how it
+ * gets onto the header. Position in this grid is the only definition of
+ * `sort_order` — saving rewrites the column from the array index.
+ */
+function GalleryEditor({
+  fields,
+  values,
+  selected,
+  onSelect,
+  onMove,
+  onRemove,
+  onAdd,
+  register,
+  setValue,
+  onSave,
+  saving,
+}: {
+  fields: { id: string }[];
+  values: LocationImage[];
+  selected: number | null;
+  onSelect: (index: number | null) => void;
+  onMove: (from: number, to: number) => void;
+  onRemove: (index: number) => void;
+  onAdd: () => void;
+  // FieldValues, not LocationFormData: refine's useForm returns the loosened
+  // helpers, and narrowing them here would only fail at the call site.
+  register: UseFormRegister<FieldValues>;
+  setValue: UseFormSetValue<FieldValues>;
+  /** Absent while creating a route: there is no row to attach photos to yet. */
+  onSave?: () => void;
+  saving: boolean;
+}) {
+  // The index being dragged lives in a ref, not just state: `drop` would
+  // otherwise read whatever `dragFrom` held when its closure was created, and
+  // a drop that lands before React has re-rendered would silently do nothing.
+  // State mirrors it only so the tile can dim while it travels.
+  const dragFromRef = useRef<number | null>(null);
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
+
+  const startDrag = (index: number) => {
+    dragFromRef.current = index;
+    setDragFrom(index);
+  };
+
+  const endDrag = () => {
+    dragFromRef.current = null;
+    setDragFrom(null);
+    setDragOver(null);
+  };
+
+  const drop = (to: number) => {
+    const from = dragFromRef.current;
+    if (from !== null && from !== to) {
+      onMove(from, to);
+      // Follow the photo that was just moved, not the slot it landed on.
+      if (selected === from) onSelect(to);
+      else if (selected !== null) {
+        if (from < selected && to >= selected) onSelect(selected - 1);
+        else if (from > selected && to <= selected) onSelect(selected + 1);
+      }
+    }
+    endDrag();
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          Thư viện ảnh ({fields.length})
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Dùng chung cho mọi tour thuộc cung này — chỉ cần upload một lần.
+          Kéo thả để đổi thứ tự; <strong>{HEADER_SLOTS} ảnh đầu</strong> là ảnh hiện ở đầu
+          trang tour và trang cung. Bấm vào ảnh để sửa chú thích.
+        </p>
+        </div>
+        {onSave && (
+          <Button type="button" variant="outline" size="sm" onClick={onSave} disabled={saving}>
+            {saving ? <Spinner /> : 'Lưu thư viện ảnh'}
+          </Button>
+        )}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_300px] items-start">
+        {/* Capped height: the gallery must not push the rest of the form off
+            the screen just because a route has thirty photos. */}
+        <div className="grid grid-cols-3 gap-2 max-h-[400px] overflow-y-auto pr-1">
+          {fields.map((field, i) => {
+            const url = resolveMediaUrl(values[i]?.image_path, values[i]?.image_url);
+            const isHeader = i < HEADER_SLOTS;
+            return (
+              <div
+                key={field.id}
+                role="button"
+                tabIndex={0}
+                draggable
+                onDragStart={() => startDrag(i)}
+                onDragOver={event => { event.preventDefault(); setDragOver(i); }}
+                onDragLeave={() => setDragOver(current => (current === i ? null : current))}
+                onDrop={event => { event.preventDefault(); drop(i); }}
+                onDragEnd={endDrag}
+                onClick={() => onSelect(selected === i ? null : i)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onSelect(selected === i ? null : i);
+                  }
+                }}
+                className={`relative aspect-[4/3] overflow-hidden rounded-lg border bg-muted p-0 cursor-grab active:cursor-grabbing transition-shadow ${
+                  selected === i ? 'border-primary ring-2 ring-primary' : 'border-border'
+                } ${dragOver === i && dragFrom !== i ? 'ring-2 ring-primary/50' : ''} ${
+                  dragFrom === i ? 'opacity-40' : ''
+                }`}
+                aria-label={`Ảnh ${i + 1}${isHeader ? ' — hiện ở đầu trang' : ''}`}
+              >
+                {url ? (
+                  <img src={url} alt="" className="h-full w-full object-cover pointer-events-none" />
+                ) : (
+                  <span className="flex h-full items-center justify-center text-[10px] text-muted-foreground">
+                    Chưa có ảnh
+                  </span>
+                )}
+
+                <span
+                  className={`absolute top-1 left-1 rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                    isHeader ? 'bg-primary text-primary-foreground' : 'bg-black/60 text-white'
+                  }`}
+                >
+                  {isHeader ? `Đầu trang ${i + 1}` : i + 1}
+                </span>
+
+                <span
+                  role="button"
+                  tabIndex={-1}
+                  aria-label="Xoá ảnh"
+                  onClick={event => {
+                    event.stopPropagation();
+                    if (confirm('Xoá ảnh này khỏi thư viện?')) onRemove(i);
+                  }}
+                  className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded bg-black/60 text-white text-sm leading-none hover:bg-destructive"
+                >
+                  ×
+                </span>
+              </div>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={onAdd}
+            onDragOver={event => event.preventDefault()}
+            onDrop={event => { event.preventDefault(); drop(fields.length - 1); }}
+            className="aspect-[4/3] rounded-lg border border-dashed border-primary text-primary text-xs font-semibold bg-transparent cursor-pointer hover:bg-primary/5"
+          >
+            + Thêm ảnh
+          </button>
+        </div>
+
+        {selected !== null && fields[selected] ? (
+          // Keyed on the selection so switching photos remounts the fields.
+          // They are uncontrolled inputs: react-hook-form seeds their DOM value
+          // when they register, and reusing the same nodes under a new name
+          // would leave the previous photo's caption sitting in the box.
+          <div
+            key={fields[selected].id}
+            className="rounded-lg border border-border p-3 flex flex-col gap-3 md:sticky md:top-4"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Ảnh {selected + 1}
+                {selected < HEADER_SLOTS && <span className="text-primary"> · đầu trang</span>}
+              </p>
+              <button
+                type="button"
+                onClick={() => onSelect(null)}
+                className="text-muted-foreground text-lg leading-none bg-transparent border-none cursor-pointer"
+                aria-label="Đóng"
+              >
+                ×
+              </button>
+            </div>
+
+            <ImageUpload
+              prefix="locations/images"
+              currentPath={values[selected]?.image_path}
+              currentUrl={values[selected]?.image_url}
+              onUploaded={key => setValue(`images.${selected}.image_path`, key)}
+              field={register(`images.${selected}.image_path`)}
+            />
+            <Input placeholder="Hoặc URL ngoài" {...register(`images.${selected}.image_url`)} />
+            <Input placeholder="Caption (VI)" {...register(`images.${selected}.caption`)} />
+            <Input placeholder="Caption (EN)" {...register(`images.${selected}.caption_en`)} />
+
+            {selected >= HEADER_SLOTS && (
+              <Button type="button" variant="outline" size="sm" onClick={() => { onMove(selected, 0); onSelect(0); }}>
+                Đưa lên đầu trang
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground">
+            Bấm vào một ảnh để sửa chú thích hoặc thay ảnh.
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
