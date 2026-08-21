@@ -1,10 +1,11 @@
 import { useTable } from '@refinedev/react-table';
-import { useDelete, useNavigation } from '@refinedev/core';
+import { useDelete, useNavigation, useUpdate } from '@refinedev/core';
 import { createColumnHelper, getCoreRowModel } from '@tanstack/react-table';
 import { DataTable } from '@/components/DataTable';
 import { Pagination } from '@/components/Pagination';
 import { resolveMediaUrl } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 
 interface Location {
   id: number;
@@ -13,6 +14,7 @@ interface Location {
   image_path: string | null;
   image_url: string;
   home_feature_order: number | null;
+  is_active: boolean;
 }
 
 const col = createColumnHelper<Location>();
@@ -20,6 +22,7 @@ const col = createColumnHelper<Location>();
 export function LocationList() {
   const { edit, create } = useNavigation();
   const { mutate: del } = useDelete();
+  const { mutate: update } = useUpdate();
 
   const columns = [
     col.accessor('id', { header: 'ID', size: 60 }),
@@ -34,6 +37,31 @@ export function LocationList() {
     col.accessor('name', { header: 'Tên' }),
     col.accessor('elevation_m', { header: 'Độ cao (m)', size: 110 }),
     col.accessor('home_feature_order', { header: 'Thứ tự', size: 80 }),
+    col.accessor('is_active', {
+      header: 'Hiện',
+      size: 90,
+      // Toggling here writes only this column, so a route's tours keep their
+      // own is_active — hiding is a filter on the public side, not a mass edit.
+      cell: info => {
+        const row = info.row.original;
+        const shown = info.getValue() !== false;
+        return (
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={shown}
+              ariaLabel={shown ? `Ẩn cung ${row.name}` : `Hiện cung ${row.name}`}
+              onCheckedChange={next => {
+                if (!next && !confirm(`Ẩn cung “${row.name}”?\n\nCung này và mọi tour thuộc nó sẽ không còn hiện trên web. Không xoá gì cả — bật lại là về như cũ.`)) return;
+                update({ resource: 'locations', id: row.id, values: { is_active: next } });
+              }}
+            />
+            <span className={shown ? 'text-xs text-muted-foreground' : 'text-xs font-medium text-amber-600'}>
+              {shown ? 'Hiện' : 'Đang ẩn'}
+            </span>
+          </div>
+        );
+      },
+    }),
     col.display({
       id: 'actions', header: '',
       cell: info => (
