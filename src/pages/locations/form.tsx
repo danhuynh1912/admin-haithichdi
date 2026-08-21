@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { SaveBar, useSavedFlash } from '@/components/SaveBar';
 import { BilingualField, EN_PLACEHOLDER } from '@/components/BilingualField';
+import { StringListEditor } from '@/components/StringListEditor';
 import { durationLabel, itineraryRowsNeeded, type RouteDuration } from '@/lib/duration';
 
 /** One photo in the route's gallery — shared by every tour up that route. */
@@ -41,6 +42,12 @@ interface LocationFormData {
   default_summary_en: string;
   default_description_md: string;
   default_description_md_en: string;
+  /** What the tour price covers, and what it does not. One short line each,
+   *  in display order — see StringListEditor. */
+  price_includes: string[];
+  price_excludes: string[];
+  price_includes_en: string[];
+  price_excludes_en: string[];
   default_price: string;
   default_max_guests: number;
   default_trek_days: number;
@@ -54,6 +61,11 @@ interface LocationFormData {
   description: string;
   description_en: string;
   home_feature_order: number | null;
+}
+
+/** Drops blank rows and trims the rest, so the array matches what is shown. */
+function cleanLines(lines: string[] | undefined): string[] {
+  return (lines ?? []).map(line => line.trim()).filter(Boolean);
 }
 
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
@@ -110,6 +122,10 @@ export function LocationForm({
   const imageUrl = watch('image_url');
   const quotationPath = watch('quotation_path');
   const imageValues = watch('images') ?? [];
+  const priceIncludes = watch('price_includes') ?? [];
+  const priceExcludes = watch('price_excludes') ?? [];
+  const priceIncludesEn = watch('price_includes_en') ?? [];
+  const priceExcludesEn = watch('price_excludes_en') ?? [];
 
   // Read live so the summary under the field tracks what is being typed. Lead
   // nights are not editable here: every route today leaves the evening before,
@@ -141,6 +157,13 @@ export function LocationForm({
     const result = await onFinish({
       ...locationData,
       default_price: locationData.default_price === '' ? null : locationData.default_price,
+      // The columns are NOT NULL text[]: a route nobody has filled in yet is an
+      // empty list, never null. Blank rows are dropped here rather than being
+      // stored and rendered as an empty bullet.
+      price_includes: cleanLines(locationData.price_includes),
+      price_excludes: cleanLines(locationData.price_excludes),
+      price_includes_en: cleanLines(locationData.price_includes_en),
+      price_excludes_en: cleanLines(locationData.price_excludes_en),
     }) as { data?: { id: number } } | undefined;
     const locationId = (result?.data?.id ?? id) as number;
     if (!locationId) return;
@@ -319,6 +342,48 @@ export function LocationForm({
               vi={<Textarea {...register('default_description_md')} rows={5} className="font-mono" />}
               en={<Textarea {...register('default_description_md_en')} rows={5} className="font-mono" placeholder={EN_PLACEHOLDER} />}
             />
+            <BilingualField
+              label="Giá tour đã bao gồm"
+              hint="Mỗi dòng một mục. Hiện thành cột ✓ ở trang cung và trang tour, ngay dưới phần mô tả."
+              vi={
+                <StringListEditor
+                  value={priceIncludes}
+                  onChange={next => setValue('price_includes', next, { shouldDirty: true })}
+                  placeholder="VD: Xe đưa đón 2 chiều Hà Nội - điểm leo"
+                  addLabel="+ Thêm mục đã bao gồm"
+                />
+              }
+              en={
+                <StringListEditor
+                  value={priceIncludesEn}
+                  onChange={next => setValue('price_includes_en', next, { shouldDirty: true })}
+                  placeholder={EN_PLACEHOLDER}
+                  addLabel="+ Add included item"
+                />
+              }
+            />
+
+            <BilingualField
+              label="Chi phí chưa bao gồm"
+              hint="Ghi rõ mức tiền nếu có (VD: xe ôm 150K/chiều) — đây là chỗ khách hay thắc mắc nhất."
+              vi={
+                <StringListEditor
+                  value={priceExcludes}
+                  onChange={next => setValue('price_excludes', next, { shouldDirty: true })}
+                  placeholder="VD: Tiền tip porter/leader (nếu có)"
+                  addLabel="+ Thêm mục chưa bao gồm"
+                />
+              }
+              en={
+                <StringListEditor
+                  value={priceExcludesEn}
+                  onChange={next => setValue('price_excludes_en', next, { shouldDirty: true })}
+                  placeholder={EN_PLACEHOLDER}
+                  addLabel="+ Add excluded item"
+                />
+              }
+            />
+
             <div className="flex justify-between items-center">
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
