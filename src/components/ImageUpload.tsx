@@ -23,9 +23,14 @@ interface Props {
    * input below is what makes it a real field.
    */
   field?: React.ComponentProps<'input'>;
+  /** Overrides the cropped thumbnail — pass an object-contain box to show a
+   *  photo at its real proportions. */
+  previewClassName?: string;
+  /** Fires with the file's own pixel size once the preview has loaded. */
+  onPreviewLoad?: (size: { width: number; height: number }) => void;
 }
 
-export function ImageUpload({ prefix, currentPath, currentUrl, onUploaded, accept = 'image/*', label = 'Ảnh', field }: Props) {
+export function ImageUpload({ prefix, currentPath, currentUrl, onUploaded, accept = 'image/*', label = 'Ảnh', field, previewClassName, onPreviewLoad }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +72,24 @@ export function ImageUpload({ prefix, currentPath, currentUrl, onUploaded, accep
     <div className="flex flex-col gap-2">
       <Label>{label}</Label>
       {previewUrl && (
-        <img src={previewUrl} alt="preview" className="w-28 h-20 object-cover rounded-md border border-border" />
+        <img
+          src={previewUrl}
+          alt="preview"
+          // Both paths on purpose: a cached image can already be decoded by the
+          // time React attaches onLoad, and then the event never fires.
+          ref={node => {
+            if (node?.complete && node.naturalWidth) {
+              onPreviewLoad?.({ width: node.naturalWidth, height: node.naturalHeight });
+            }
+          }}
+          onLoad={event =>
+            onPreviewLoad?.({
+              width: event.currentTarget.naturalWidth,
+              height: event.currentTarget.naturalHeight,
+            })
+          }
+          className={previewClassName ?? 'w-28 h-20 object-cover rounded-md border border-border'}
+        />
       )}
       <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={uploading} className="w-fit">
         {uploading ? <><Spinner /> Đang upload…</> : 'Chọn file'}

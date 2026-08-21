@@ -665,7 +665,7 @@ function GalleryEditor({
       <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_300px] items-start">
         {/* Capped height: the gallery must not push the rest of the form off
             the screen just because a route has thirty photos. */}
-        <div className="grid grid-cols-3 gap-2 max-h-[400px] overflow-y-auto pr-1">
+        <div className="grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(68px,1fr))] max-h-[260px] overflow-y-auto pr-1">
           {fields.map((field, i) => {
             const url = resolveMediaUrl(values[i]?.image_path, values[i]?.image_url);
             const isHeader = i < HEADER_SLOTS;
@@ -687,7 +687,7 @@ function GalleryEditor({
                     onSelect(selected === i ? null : i);
                   }
                 }}
-                className={`relative aspect-[4/3] overflow-hidden rounded-lg border bg-muted p-0 cursor-grab active:cursor-grabbing transition-shadow ${
+                className={`group relative aspect-[4/3] overflow-hidden rounded-md border bg-muted p-0 cursor-grab active:cursor-grabbing transition-shadow ${
                   selected === i ? 'border-primary ring-2 ring-primary' : 'border-border'
                 } ${dragOver === i && dragFrom !== i ? 'ring-2 ring-primary/50' : ''} ${
                   dragFrom === i ? 'opacity-40' : ''
@@ -703,11 +703,11 @@ function GalleryEditor({
                 )}
 
                 <span
-                  className={`absolute top-1 left-1 rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                    isHeader ? 'bg-primary text-primary-foreground' : 'bg-black/60 text-white'
+                  className={`absolute top-0.5 left-0.5 rounded px-1 py-px text-[9px] font-bold leading-none ${
+                    isHeader ? 'bg-primary text-primary-foreground' : 'bg-black/55 text-white'
                   }`}
                 >
-                  {isHeader ? `Đầu trang ${i + 1}` : i + 1}
+                  {i + 1}
                 </span>
 
                 <span
@@ -718,7 +718,7 @@ function GalleryEditor({
                     event.stopPropagation();
                     if (confirm('Xoá ảnh này khỏi thư viện?')) onRemove(i);
                   }}
-                  className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded bg-black/60 text-white text-sm leading-none hover:bg-destructive"
+                  className="absolute top-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded bg-black/55 text-white text-xs leading-none opacity-0 transition-opacity group-hover:opacity-100 hover:bg-destructive"
                 >
                   ×
                 </span>
@@ -731,59 +731,125 @@ function GalleryEditor({
             onClick={onAdd}
             onDragOver={event => event.preventDefault()}
             onDrop={event => { event.preventDefault(); drop(fields.length - 1); }}
-            className="aspect-[4/3] rounded-lg border border-dashed border-primary text-primary text-xs font-semibold bg-transparent cursor-pointer hover:bg-primary/5"
+            className="aspect-[4/3] rounded-md border border-dashed border-primary text-primary text-lg leading-none font-semibold bg-transparent cursor-pointer hover:bg-primary/5"
+            title="Thêm ảnh"
           >
-            + Thêm ảnh
+            +
           </button>
         </div>
 
         {selected !== null && fields[selected] ? (
-          // Keyed on the selection so switching photos remounts the fields.
-          // They are uncontrolled inputs: react-hook-form seeds their DOM value
-          // when they register, and reusing the same nodes under a new name
-          // would leave the previous photo's caption sitting in the box.
-          <div
+          // Keyed on the photo so switching remounts the panel. Its inputs are
+          // uncontrolled — react-hook-form seeds their DOM value when they
+          // register, and reusing the same nodes under a new name would leave
+          // the previous photo's caption sitting in the box. The remount also
+          // clears the measured size, which belongs to the photo being shown.
+          <PhotoPanel
             key={fields[selected].id}
-            className="rounded-lg border border-border p-3 flex flex-col gap-3 md:sticky md:top-4"
-          >
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Ảnh {selected + 1}
-                {selected < HEADER_SLOTS && <span className="text-primary"> · đầu trang</span>}
-              </p>
-              <button
-                type="button"
-                onClick={() => onSelect(null)}
-                className="text-muted-foreground text-lg leading-none bg-transparent border-none cursor-pointer"
-                aria-label="Đóng"
-              >
-                ×
-              </button>
-            </div>
-
-            <ImageUpload
-              prefix="locations/images"
-              currentPath={values[selected]?.image_path}
-              currentUrl={values[selected]?.image_url}
-              onUploaded={key => setValue(`images.${selected}.image_path`, key)}
-              field={register(`images.${selected}.image_path`)}
-            />
-            <Input placeholder="Hoặc URL ngoài" {...register(`images.${selected}.image_url`)} />
-            <Input placeholder="Caption (VI)" {...register(`images.${selected}.caption`)} />
-            <Input placeholder="Caption (EN)" {...register(`images.${selected}.caption_en`)} />
-
-            {selected >= HEADER_SLOTS && (
-              <Button type="button" variant="outline" size="sm" onClick={() => { onMove(selected, 0); onSelect(0); }}>
-                Đưa lên đầu trang
-              </Button>
-            )}
-          </div>
+            index={selected}
+            image={values[selected]}
+            onClose={() => onSelect(null)}
+            onPromote={() => { onMove(selected, 0); onSelect(0); }}
+            register={register}
+            setValue={setValue}
+          />
         ) : (
           <div className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground">
             Bấm vào một ảnh để sửa chú thích hoặc thay ảnh.
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Reduces 1600×1200 to "4:3", or gives up when the ratio is not a tidy one. */
+function aspectLabel(width: number, height: number): string | null {
+  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+  const divisor = gcd(width, height);
+  const w = width / divisor;
+  const h = height / divisor;
+  return w <= 40 && h <= 40 ? `${w}:${h}` : null;
+}
+
+/**
+ * The selected photo's own fields, with a preview at its real proportions.
+ *
+ * The thumbnail in the grid is a cropped 4:3 box, and so was the preview this
+ * panel used to show — which meant nothing on the screen said whether a photo
+ * was landscape or portrait. That matters here: the first four photos are laid
+ * into a fixed header collage on the public page.
+ */
+function PhotoPanel({
+  index,
+  image,
+  onClose,
+  onPromote,
+  register,
+  setValue,
+}: {
+  index: number;
+  image: LocationImage | undefined;
+  onClose: () => void;
+  onPromote: () => void;
+  register: UseFormRegister<FieldValues>;
+  setValue: UseFormSetValue<FieldValues>;
+}) {
+  // Measured off the loaded image rather than read from the width/height
+  // columns: those are null for every photo uploaded before they existed.
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  const ratio = size && aspectLabel(size.width, size.height);
+  const orientation = !size
+    ? null
+    : size.width > size.height ? 'Ngang'
+    : size.width < size.height ? 'Dọc'
+    : 'Vuông';
+
+  return (
+    <div className="rounded-lg border border-border p-3 flex flex-col gap-3 md:sticky md:top-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Ảnh {index + 1}
+          {index < HEADER_SLOTS && <span className="text-primary"> · đầu trang</span>}
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-muted-foreground text-lg leading-none bg-transparent border-none cursor-pointer"
+          aria-label="Đóng"
+        >
+          ×
+        </button>
+      </div>
+
+      <ImageUpload
+        prefix="locations/images"
+        currentPath={image?.image_path}
+        currentUrl={image?.image_url}
+        onUploaded={key => setValue(`images.${index}.image_path`, key)}
+        field={register(`images.${index}.image_path`)}
+        // Contained in a checkered-grey box: letterboxing is what makes a
+        // portrait photo read as portrait at a glance.
+        previewClassName="max-h-[190px] w-full object-contain rounded-md border border-border bg-muted"
+        onPreviewLoad={setSize}
+      />
+
+      {size && (
+        <p className="text-xs text-muted-foreground -mt-1">
+          {size.width} × {size.height}px · <span className="font-semibold">{orientation}</span>
+          {ratio ? ` · ${ratio}` : ''}
+        </p>
+      )}
+
+      <Input placeholder="Hoặc URL ngoài" {...register(`images.${index}.image_url`)} />
+      <Input placeholder="Caption (VI)" {...register(`images.${index}.caption`)} />
+      <Input placeholder="Caption (EN)" {...register(`images.${index}.caption_en`)} />
+
+      {index >= HEADER_SLOTS && (
+        <Button type="button" variant="outline" size="sm" onClick={onPromote}>
+          Đưa lên đầu trang
+        </Button>
+      )}
     </div>
   );
 }
