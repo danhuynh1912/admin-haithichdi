@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useForm } from '@refinedev/react-hook-form';
 import { useInvalidate, useNavigation } from '@refinedev/core';
-import { useFieldArray } from 'react-hook-form';
+import { Controller, useFieldArray } from 'react-hook-form';
 import { ImageUpload } from '@/components/ImageUpload';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
@@ -122,10 +122,6 @@ export function LocationForm({
   const imageUrl = watch('image_url');
   const quotationPath = watch('quotation_path');
   const imageValues = watch('images') ?? [];
-  const priceIncludes = watch('price_includes') ?? [];
-  const priceExcludes = watch('price_excludes') ?? [];
-  const priceIncludesEn = watch('price_includes_en') ?? [];
-  const priceExcludesEn = watch('price_excludes_en') ?? [];
 
   // Read live so the summary under the field tracks what is being typed. Lead
   // nights are not editable here: every route today leaves the evening before,
@@ -342,23 +338,42 @@ export function LocationForm({
               vi={<Textarea {...register('default_description_md')} rows={5} className="font-mono" />}
               en={<Textarea {...register('default_description_md_en')} rows={5} className="font-mono" placeholder={EN_PLACEHOLDER} />}
             />
+            {/* Controller, not watch()+setValue: @refinedev/react-hook-form
+                fills an edit form by copying the fetched record only into
+                fields that are registered. A value read with watch() alone is
+                never registered, so the record's lists were dropped on load and
+                both editors came up empty. */}
             <BilingualField
               label="Giá tour đã bao gồm"
               hint="Mỗi dòng một mục. Hiện thành cột ✓ ở trang cung và trang tour, ngay dưới phần mô tả."
               vi={
-                <StringListEditor
-                  value={priceIncludes}
-                  onChange={next => setValue('price_includes', next, { shouldDirty: true })}
-                  placeholder="VD: Xe đưa đón 2 chiều Hà Nội - điểm leo"
-                  addLabel="+ Thêm mục đã bao gồm"
+                <Controller
+                  control={control}
+                  name='price_includes'
+                  defaultValue={[]}
+                  render={({ field }) => (
+                    <StringListEditor
+                      value={field.value ?? []}
+                      onChange={field.onChange}
+                      placeholder="VD: Xe đưa đón 2 chiều Hà Nội - điểm leo"
+                      addLabel="+ Thêm mục đã bao gồm"
+                    />
+                  )}
                 />
               }
               en={
-                <StringListEditor
-                  value={priceIncludesEn}
-                  onChange={next => setValue('price_includes_en', next, { shouldDirty: true })}
-                  placeholder={EN_PLACEHOLDER}
-                  addLabel="+ Add included item"
+                <Controller
+                  control={control}
+                  name='price_includes_en'
+                  defaultValue={[]}
+                  render={({ field }) => (
+                    <StringListEditor
+                      value={field.value ?? []}
+                      onChange={field.onChange}
+                      placeholder={EN_PLACEHOLDER}
+                      addLabel="+ Add included item"
+                    />
+                  )}
                 />
               }
             />
@@ -367,19 +382,33 @@ export function LocationForm({
               label="Chi phí chưa bao gồm"
               hint="Ghi rõ mức tiền nếu có (VD: xe ôm 150K/chiều) — đây là chỗ khách hay thắc mắc nhất."
               vi={
-                <StringListEditor
-                  value={priceExcludes}
-                  onChange={next => setValue('price_excludes', next, { shouldDirty: true })}
-                  placeholder="VD: Tiền tip porter/leader (nếu có)"
-                  addLabel="+ Thêm mục chưa bao gồm"
+                <Controller
+                  control={control}
+                  name='price_excludes'
+                  defaultValue={[]}
+                  render={({ field }) => (
+                    <StringListEditor
+                      value={field.value ?? []}
+                      onChange={field.onChange}
+                      placeholder="VD: Tiền tip porter/leader (nếu có)"
+                      addLabel="+ Thêm mục chưa bao gồm"
+                    />
+                  )}
                 />
               }
               en={
-                <StringListEditor
-                  value={priceExcludesEn}
-                  onChange={next => setValue('price_excludes_en', next, { shouldDirty: true })}
-                  placeholder={EN_PLACEHOLDER}
-                  addLabel="+ Add excluded item"
+                <Controller
+                  control={control}
+                  name='price_excludes_en'
+                  defaultValue={[]}
+                  render={({ field }) => (
+                    <StringListEditor
+                      value={field.value ?? []}
+                      onChange={field.onChange}
+                      placeholder={EN_PLACEHOLDER}
+                      addLabel="+ Add excluded item"
+                    />
+                  )}
                 />
               }
             />
