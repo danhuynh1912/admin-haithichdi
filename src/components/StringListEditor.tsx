@@ -25,7 +25,13 @@ export function StringListEditor({
   const replace = (index: number, text: string) =>
     onChange(items.map((item, i) => (i === index ? text : item)));
 
-  const remove = (index: number) => onChange(items.filter((_, i) => i !== index));
+  const remove = (index: number) => {
+    // A blank row is one someone just added and changed their mind about —
+    // there is nothing to lose, so asking would only be in the way.
+    const text = items[index]?.trim();
+    if (text && !confirm(`Xoá dòng này?\n\n“${text}”`)) return;
+    onChange(items.filter((_, i) => i !== index));
+  };
 
   const move = (index: number, delta: number) => {
     const target = index + delta;
