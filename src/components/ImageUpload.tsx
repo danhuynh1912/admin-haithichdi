@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { uploadMedia, type MediaPrefix } from '@/lib/upload';
 import { resolveMediaUrl } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
@@ -39,8 +39,21 @@ export function ImageUpload({ prefix, currentPath, currentUrl, onUploaded, accep
   // from them instead would freeze the preview at whatever the form held on
   // first paint, which for an edit form is nothing — the record arrives later.
   const [pickedPreview, setPickedPreview] = useState<string | null>(null);
+  const previewRef = useRef<HTMLImageElement>(null);
   const pickedPreviewRef = useRef<string | null>(null);
   const previewUrl = pickedPreview ?? resolveMediaUrl(currentPath, currentUrl);
+
+  // A cached image can already be decoded by the time React attaches onLoad,
+  // and then that event never fires. This covers it — as an effect keyed on the
+  // source rather than as a ref callback, which React re-runs on every render
+  // and would turn a setState in the caller into an endless loop.
+  useEffect(() => {
+    const img = previewRef.current;
+    if (img?.complete && img.naturalWidth) {
+      onPreviewLoad?.({ width: img.naturalWidth, height: img.naturalHeight });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewUrl]);
 
   // Revoking through a ref rather than inside the state updater: React calls
   // updaters twice in StrictMode, and freeing a URL is not something to repeat.
@@ -75,13 +88,7 @@ export function ImageUpload({ prefix, currentPath, currentUrl, onUploaded, accep
         <img
           src={previewUrl}
           alt="preview"
-          // Both paths on purpose: a cached image can already be decoded by the
-          // time React attaches onLoad, and then the event never fires.
-          ref={node => {
-            if (node?.complete && node.naturalWidth) {
-              onPreviewLoad?.({ width: node.naturalWidth, height: node.naturalHeight });
-            }
-          }}
+          ref={previewRef}
           onLoad={event =>
             onPreviewLoad?.({
               width: event.currentTarget.naturalWidth,

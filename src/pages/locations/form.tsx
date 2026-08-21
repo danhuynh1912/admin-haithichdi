@@ -798,6 +798,12 @@ function PhotoPanel({
   // Measured off the loaded image rather than read from the width/height
   // columns: those are null for every photo uploaded before they existed.
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  // Keeps the same object when the numbers have not changed, so a repeated
+  // report cannot start a render loop.
+  const reportSize = (next: { width: number; height: number }) =>
+    setSize(current =>
+      current && current.width === next.width && current.height === next.height ? current : next,
+    );
   const ratio = size && aspectLabel(size.width, size.height);
   const orientation = !size
     ? null
@@ -831,7 +837,7 @@ function PhotoPanel({
         // Contained in a checkered-grey box: letterboxing is what makes a
         // portrait photo read as portrait at a glance.
         previewClassName="max-h-[190px] w-full object-contain rounded-md border border-border bg-muted"
-        onPreviewLoad={setSize}
+        onPreviewLoad={reportSize}
       />
 
       {size && (
