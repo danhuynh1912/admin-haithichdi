@@ -12,12 +12,19 @@ export type MediaPrefix =
 const WEBP_QUALITY = 0.82;
 
 /**
- * Longest edge a canvas is allowed to reach. Safari refuses to rasterise past
- * roughly 16.7M pixels and hands back a blank canvas rather than an error, so
- * anything larger is scaled down first. 4096 is far above what any screen on
- * the site asks for, so this is a safety limit, not a quality decision.
+ * Longest edge an upload is stored at.
+ *
+ * This is what the site's image optimiser has to download and decode every
+ * time it re-encodes a size it has not cached yet, so it sets the floor on how
+ * slow the first view of a photo can be. At 4096 the originals landed around
+ * 1.5-2 MB and that first view took seconds; 2560 is still more than the
+ * largest thing the site ever displays — the fullscreen gallery on a 2x screen
+ * asks for about 2048 — while cutting the file roughly in half.
+ *
+ * (It doubles as a Safari guard: Safari refuses to rasterise a canvas past
+ * roughly 16.7M pixels and hands back a blank one rather than an error.)
  */
-const MAX_EDGE = 4096;
+const MAX_EDGE = 2560;
 
 const EXTENSION_BY_TYPE: Record<string, string> = {
   'image/webp': 'webp',
