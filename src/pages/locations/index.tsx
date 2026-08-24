@@ -6,11 +6,13 @@ import { Pagination } from '@/components/Pagination';
 import { resolveMediaUrl } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { InlineNumberCell } from '@/components/InlineNumberCell';
 
 interface Location {
   id: number;
   name: string;
   elevation_m: number;
+  difficulty: number | string | null;
   image_path: string | null;
   image_url: string;
   home_feature_order: number | null;
@@ -24,6 +26,19 @@ export function LocationList() {
   const { mutate: del } = useDelete();
   const { mutate: update } = useUpdate();
 
+  /**
+   * refine's mutate is callback-based; the inline cells await a promise so a
+   * failed save can keep the box open with the message rather than closing as
+   * though it had worked.
+   */
+  const saveField = (id: number, field: string, value: number | null) =>
+    new Promise((resolve, reject) => {
+      update(
+        { resource: 'locations', id, values: { [field]: value } },
+        { onSuccess: resolve, onError: reject },
+      );
+    });
+
   const columns = [
     col.accessor('id', { header: 'ID', size: 60 }),
     col.display({
@@ -35,8 +50,59 @@ export function LocationList() {
       },
     }),
     col.accessor('name', { header: 'Tên' }),
-    col.accessor('elevation_m', { header: 'Độ cao (m)', size: 110 }),
-    col.accessor('home_feature_order', { header: 'Thứ tự', size: 80 }),
+    col.accessor('elevation_m', {
+      header: 'Độ cao (m)',
+      size: 120,
+      cell: info => (
+        <InlineNumberCell
+          value={info.getValue()}
+          ariaLabel={`độ cao của ${info.row.original.name}`}
+          onSave={next => saveField(info.row.original.id, 'elevation_m', next)}
+          min={0}
+          step={1}
+        />
+      ),
+    }),
+    col.accessor('difficulty', {
+      header: 'Độ khó',
+      size: 110,
+      cell: info => {
+        const raw = info.getValue();
+        return (
+          <InlineNumberCell
+            // numeric comes back as a string over PostgREST.
+            value={raw == null ? null : Number(raw)}
+            ariaLabel={`độ khó của ${info.row.original.name}`}
+            onSave={next => saveField(info.row.original.id, 'difficulty', next)}
+            // Whole grades lose the decimal: "6.0" reads as more precision
+            // than anyone measured.
+            format={value => (Number.isInteger(value) ? String(value) : value.toFixed(1))}
+            suffix="/10"
+            placeholder="Chưa chấm"
+            nullable
+            min={1}
+            max={10}
+            step={0.5}
+          />
+        );
+      },
+    }),
+    col.accessor('home_feature_order', {
+      header: 'Thứ tự',
+      size: 100,
+      cell: info => (
+        <InlineNumberCell
+          value={info.getValue()}
+          ariaLabel={`thứ tự trang chủ của ${info.row.original.name}`}
+          onSave={next => saveField(info.row.original.id, 'home_feature_order', next)}
+          placeholder="—"
+          nullable
+          min={1}
+          step={1}
+          width="w-16"
+        />
+      ),
+    }),
     col.accessor('is_active', {
       header: 'Hiện',
       size: 90,
