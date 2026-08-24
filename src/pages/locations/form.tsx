@@ -56,6 +56,8 @@ interface LocationFormData {
   default_lead_nights: number;
   name: string;
   elevation_m: number;
+  /** 1-10, half steps allowed. Empty means nobody has graded the route. */
+  difficulty: string;
   image_path: string;
   image_url: string;
   quotation_path: string;
@@ -189,6 +191,11 @@ export function LocationForm({
     const result = await onFinish({
       ...locationData,
       default_price: locationData.default_price === '' ? null : locationData.default_price,
+      // Blank means ungraded, which the column stores as null — an empty string
+      // would be rejected by numeric, and 0 would read as "easiest possible".
+      difficulty: locationData.difficulty === '' || locationData.difficulty == null
+        ? null
+        : locationData.difficulty,
       // The columns are NOT NULL text[]: a route nobody has filled in yet is an
       // empty list, never null. Blank rows are dropped here rather than being
       // stored and rendered as an empty bullet.
@@ -253,9 +260,28 @@ export function LocationForm({
               <Input {...register('name', { required: 'Bắt buộc' })} />
             </Field>
 
-            <Field label="Độ cao (m) *" error={errors.elevation_m?.message as string}>
-              <Input type="number" {...register('elevation_m', { required: 'Bắt buộc', valueAsNumber: true })} />
-            </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Độ cao (m) *" error={errors.elevation_m?.message as string}>
+                <Input type="number" {...register('elevation_m', { required: 'Bắt buộc', valueAsNumber: true })} />
+              </Field>
+              <Field label="Độ khó (trên 10)" error={errors.difficulty?.message as string}>
+                <Input
+                  type="number"
+                  min={1}
+                  max={10}
+                  step={0.5}
+                  placeholder="VD: 6.5"
+                  {...register('difficulty', {
+                    min: { value: 1, message: 'Từ 1 đến 10' },
+                    max: { value: 10, message: 'Từ 1 đến 10' },
+                  })}
+                />
+                <span className="text-xs text-muted-foreground">
+                  Hiện ở trang cung và trang tour, và là con số chatbot dùng để gợi ý
+                  cung hợp thể lực khách. Để trống nếu chưa chấm.
+                </span>
+              </Field>
+            </div>
 
             <BilingualField
               label="Mô tả"
