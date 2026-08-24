@@ -74,6 +74,57 @@ async function toWebp(file: File): Promise<Blob> {
   }
 }
 
+/**
+ * The image's average colour as `#rrggbb`, for the public site to paint into a
+ * tile while the photo itself is still loading.
+ *
+ * Averaged from a 16x16 draw rather than a one-pixel one: browsers are free to
+ * pick a cheap sampling filter on an extreme downscale, and a photo reduced
+ * straight to a single pixel can come back as whatever happened to be under
+ * the sample point. Sixteen squares averaged by hand is still trivial work and
+ * gives the same answer every time.
+ *
+ * Returns null rather than throwing — a missing colour costs a grey tile,
+ * which is what the site did before, and is never worth failing an upload for.
+ */
+export async function averageColor(file: File): Promise<string | null> {
+  if (!file.type.startsWith('image/')) return null;
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    const size = 16;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return null;
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = 'high';
+    context.drawImage(bitmap, 0, 0, size, size);
+    bitmap.close();
+
+    const { data } = context.getImageData(0, 0, size, size);
+    let r = 0, g = 0, b = 0, weight = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      // Weight by opacity so a transparent border cannot drag the average
+      // toward whatever the canvas was cleared to.
+      const alpha = data[i + 3] / 255;
+      r += data[i] * alpha;
+      g += data[i + 1] * alpha;
+      b += data[i + 2] * alpha;
+      weight += alpha;
+    }
+    if (weight === 0) return null;
+
+    const pair = (value: number) =>
+      Math.round(value / weight).toString(16).padStart(2, '0');
+    return `#${pair(r)}${pair(g)}${pair(b)}`;
+  } catch {
+    return null;
+  }
+}
+
 export async function uploadMedia(file: File, prefix: MediaPrefix): Promise<string> {
   const payload = await toWebp(file);
   const contentType = payload.type || file.type;

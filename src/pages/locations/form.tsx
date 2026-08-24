@@ -24,6 +24,14 @@ interface LocationImage {
   caption: string;
   caption_en: string;
   sort_order: number;
+  /**
+   * `#rrggbb`, painted on the public site while the photo loads.
+   *
+   * Declared here so it survives a save: writeGallery rewrites the whole
+   * gallery from form state, so a column the form does not carry is a column
+   * the next edit deletes.
+   */
+  dominant_color?: string | null;
 }
 
 /** One day of the walk. Shared by every tour up the route, like the gallery. */
@@ -859,6 +867,7 @@ function PhotoPanel({
         currentPath={image?.image_path}
         currentUrl={image?.image_url}
         onUploaded={key => setValue(`images.${index}.image_path`, key)}
+        onColor={hex => setValue(`images.${index}.dominant_color`, hex)}
         field={register(`images.${index}.image_path`)}
         // Contained in a checkered-grey box: letterboxing is what makes a
         // portrait photo read as portrait at a glance.

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { uploadMedia, type MediaPrefix } from '@/lib/upload';
+import { averageColor, uploadMedia, type MediaPrefix } from '@/lib/upload';
 import { resolveMediaUrl } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -28,9 +28,11 @@ interface Props {
   previewClassName?: string;
   /** Fires with the file's own pixel size once the preview has loaded. */
   onPreviewLoad?: (size: { width: number; height: number }) => void;
+  /** Fires with the image's average colour once it has been uploaded. */
+  onColor?: (hex: string) => void;
 }
 
-export function ImageUpload({ prefix, currentPath, currentUrl, onUploaded, accept = 'image/*', label = 'Ảnh', field, previewClassName, onPreviewLoad }: Props) {
+export function ImageUpload({ prefix, currentPath, currentUrl, onUploaded, accept = 'image/*', label = 'Ảnh', field, previewClassName, onPreviewLoad, onColor }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +74,12 @@ export function ImageUpload({ prefix, currentPath, currentUrl, onUploaded, accep
     try {
       const key = await uploadMedia(file, prefix);
       onUploaded(key);
+      // After the upload, not before: the colour is a nicety, and computing it
+      // first would put a canvas decode between the click and the upload.
+      if (onColor) {
+        const hex = await averageColor(file);
+        if (hex) onColor(hex);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload thất bại');
       // Drop back to whatever is stored on the record.
