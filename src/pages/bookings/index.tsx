@@ -121,6 +121,15 @@ export function BookingList() {
             className={cn(
               badgeVariants({ variant: statusVariant(info.getValue()) }),
               'h-8 cursor-pointer appearance-none rounded-full px-3.5 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+              // A select takes its width from the longest option, not the
+              // chosen one, so every pill is as wide as "Cần xác nhận lại liên
+              // hệ" and the shorter labels sat against the left edge. The
+              // badge's own `justify-center` cannot fix that: a select renders
+              // its text in a box of the browser's making, outside the flex
+              // layout. `text-center` is what reaches it. Vertical padding goes
+              // for the same reason — with a fixed height the browser centres
+              // the line itself, and the inherited `py-0.5` only skewed it.
+              'py-0 text-center',
             )}
           >
             {Object.entries(STATUS_LABEL).map(([val, label]) => (
