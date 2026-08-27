@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/dialog';
 import { SimpleSelect } from '@/components/SimpleSelect';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { slugify, writeBookingsXlsx, type ExportableBooking } from '@/lib/export-bookings';
 import { cn, formatDate, formatDateTime } from '@/lib/utils';
@@ -63,6 +64,8 @@ const STATUS_LABEL: Record<string, string> = {
   needs_contact_check: 'Cần xác nhận lại liên hệ',
   cancelled: 'Đã hủy',
 };
+
+const STATUS_ITEMS = Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label }));
 
 /** The one status that carries a note the customer is meant to act on. */
 const NEEDS_CONTACT = 'needs_contact_check';
@@ -183,40 +186,19 @@ export function BookingList() {
     }),
     col.accessor('status', {
       header: 'Trạng thái',
-      // The badge *is* the control: a native select wearing the badge's own
-      // tonal styling, so the row reads at a glance and still edits in place
-      // without a second column repeating the same value.
       cell: info => {
         const id = info.row.original.id;
         return (
-          <select
+          <StatusSelect
             value={info.getValue()}
-            onChange={e => {
-              const next = e.target.value;
+            onChange={next => {
               update({ resource: 'bookings', id, values: { status: next } });
               // This status is only half-entered without a note saying what to
               // check, so picking it opens the booking on the note field
               // rather than leaving the customer a bare "something is wrong".
               if (next === NEEDS_CONTACT) setOpenId(id);
             }}
-            className={cn(
-              badgeVariants({ variant: statusVariant(info.getValue()) }),
-              'h-8 cursor-pointer appearance-none rounded-full px-3.5 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-              // A select takes its width from the longest option, not the
-              // chosen one, so every pill is as wide as "Cần xác nhận lại liên
-              // hệ" and the shorter labels sat against the left edge. The
-              // badge's own `justify-center` cannot fix that: a select renders
-              // its text in a box of the browser's making, outside the flex
-              // layout. `text-center` is what reaches it. Vertical padding goes
-              // for the same reason — with a fixed height the browser centres
-              // the line itself, and the inherited `py-0.5` only skewed it.
-              'py-0 text-center',
-            )}
-          >
-            {Object.entries(STATUS_LABEL).map(([val, label]) => (
-              <option key={val} value={val}>{label}</option>
-            ))}
-          </select>
+          />
         );
       },
     }),
@@ -362,7 +344,7 @@ export function BookingList() {
               onValueChange={next => { setStatus(next); resetPage(); }}
               options={[
                 { value: ALL, label: 'Tất cả trạng thái' },
-                ...Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label })),
+                ...STATUS_ITEMS,
               ]}
             />
             <Button variant="outline" onClick={handleExport} disabled={exporting}>
@@ -394,6 +376,44 @@ export function BookingList() {
         {openBooking ? <BookingDetails booking={openBooking} /> : null}
       </Modal>
     </div>
+  );
+}
+
+/**
+ * The badge *is* the control: the status pill wearing its own tonal styling,
+ * so the row reads at a glance and still edits in place without a second
+ * column repeating the same value.
+ *
+ * Built on the panel's own select rather than a native one — a native `select`
+ * drops the operating system's list on the page, which matches nothing else
+ * here, and takes its width from the longest option so every pill was as wide
+ * as "Cần xác nhận lại liên hệ".
+ */
+function StatusSelect({ value, onChange }: { value: string; onChange: (next: string) => void }) {
+  return (
+    <Select value={value} onValueChange={next => onChange(String(next))} items={STATUS_ITEMS}>
+      <SelectTrigger
+        aria-label="Trạng thái"
+        className={cn(
+          badgeVariants({ variant: statusVariant(value) }),
+          'h-8 cursor-pointer gap-1 rounded-full px-3 pr-2.5 text-sm',
+          // The chevron is the only sign the pill can be changed at all, so it
+          // takes the pill's own colour instead of the default muted grey.
+          '[&_svg]:size-3.5! [&_svg]:text-current [&_svg]:opacity-60',
+        )}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {STATUS_ITEMS.map(({ value: option, label }) => (
+          <SelectItem key={option} value={option}>
+            {/* The list shows the same pills the table does, so picking one is
+                choosing the thing you will see in the row afterwards. */}
+            <Badge variant={statusVariant(option)}>{label}</Badge>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
