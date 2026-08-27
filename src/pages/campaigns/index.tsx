@@ -1,5 +1,5 @@
 import { useTable } from '@refinedev/react-table';
-import { useNavigation } from '@refinedev/core';
+import { useDelete, useNavigation } from '@refinedev/core';
 import { createColumnHelper, getCoreRowModel } from '@tanstack/react-table';
 import { DataTable } from '@/components/DataTable';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +20,7 @@ const col = createColumnHelper<CampaignRow>();
 
 export function CampaignList() {
   const { create, edit } = useNavigation();
+  const { mutate: del } = useDelete();
 
   const columns = [
     col.accessor('title', {
@@ -66,6 +67,40 @@ export function CampaignList() {
     col.accessor('updated_at', {
       header: 'Cập nhật',
       cell: info => formatDate(info.getValue()),
+    }),
+    col.display({
+      id: 'actions',
+      header: '',
+      cell: info => {
+        const row = info.row.original;
+        return (
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => edit('campaigns', row.id)}>
+              Sửa
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                // The tours and the gallery go with it — `on delete cascade` on
+                // campaign_tours and campaign_images — so the warning says so
+                // rather than letting a photo set disappear quietly.
+                if (
+                  confirm(
+                    `Xoá chiến dịch "${row.title}"?\n` +
+                      'Kho ảnh và liên kết tới các chuyến cũng bị xoá theo. ' +
+                      'Hành động này không thể hoàn tác.',
+                  )
+                ) {
+                  del({ resource: 'campaigns', id: row.id });
+                }
+              }}
+            >
+              Xoá
+            </Button>
+          </div>
+        );
+      },
     }),
   ];
 
