@@ -6,7 +6,9 @@ export type MediaPrefix =
   | 'tours/images'
   | 'profiles/avatars'
   | 'blog/heroes'
-  | 'blog/images';
+  | 'blog/images'
+  | 'campaigns/posters'
+  | 'campaigns/gallery';
 
 /** Lossy but visually clean for photographs; well below JPEG at the same look. */
 const WEBP_QUALITY = 0.82;

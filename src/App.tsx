@@ -20,6 +20,8 @@ import { StaffList } from '@/pages/staff';
 import { StaffForm } from '@/pages/staff/form';
 import { ChatbotSettingsPage } from '@/pages/chatbot';
 import { StoragePage } from '@/pages/storage';
+import { CampaignList } from '@/pages/campaigns';
+import { CampaignForm } from '@/pages/campaigns/form';
 
 export default function App() {
   return (
@@ -40,6 +42,9 @@ export default function App() {
           { name: 'blog_tags', list: '/blog-tags' },
           { name: 'blog_post_tags' },
           { name: 'blog_images' },
+          { name: 'campaigns', list: '/campaigns', create: '/campaigns/create', edit: '/campaigns/edit/:id' },
+          { name: 'campaign_tours' },
+          { name: 'campaign_images' },
           // table is `profiles`; the list reads the `staff_admin` view (adds email)
           { name: 'profiles', list: '/staff', create: '/staff/create', edit: '/staff/edit/:id', meta: { label: 'Tài khoản' } },
           { name: 'staff_admin', list: '/staff' },
@@ -73,6 +78,10 @@ export default function App() {
             <Route path="/tours/create" element={<RequireAdmin><TourForm mode="create" /></RequireAdmin>} />
             <Route path="/tours/bulk" element={<RequireAdmin><TourBulkCreate /></RequireAdmin>} />
             <Route path="/tours/edit/:id" element={<RequireAdmin><TourForm mode="edit" /></RequireAdmin>} />
+            <Route path="/campaigns" element={<RequireAdmin><CampaignList /></RequireAdmin>} />
+            <Route path="/campaigns/create" element={<RequireAdmin><CampaignForm mode="create" /></RequireAdmin>} />
+            <Route path="/campaigns/edit/:id" element={<RequireAdmin><CampaignForm mode="edit" /></RequireAdmin>} />
+
             <Route path="/blogs" element={<RequireAdmin><BlogList /></RequireAdmin>} />
             <Route path="/blogs/create" element={<RequireAdmin><BlogForm mode="create" /></RequireAdmin>} />
             <Route path="/blogs/edit/:id" element={<RequireAdmin><BlogForm mode="edit" /></RequireAdmin>} />
