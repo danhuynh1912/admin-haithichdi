@@ -278,6 +278,18 @@ export function BookingList() {
     return all;
   };
 
+  /**
+   * What the filters add up to, in words — the sheet's title when its rows
+   * span more than one departure and so cannot name a single one.
+   */
+  const exportTitle = () => {
+    const parts = [
+      locationId === ALL ? 'Tất cả cung' : locations.find(l => String(l.id) === locationId)?.name,
+      status === ALL ? null : STATUS_LABEL[status],
+    ];
+    return parts.filter(Boolean).join(' · ');
+  };
+
   /** `bookings-phu-sa-phin-cho-xac-nhan-2026-08-27.xlsx` */
   const exportFileName = () => {
     const tour = tours.find(t => String(t.id) === tourId);
@@ -306,7 +318,7 @@ export function BookingList() {
       await writeBookingsXlsx({
         bookings,
         fileName: exportFileName(),
-        statusLabel: value => STATUS_LABEL[value] ?? value,
+        fallbackTitle: exportTitle(),
         tourDates,
       });
     } catch (e) {
