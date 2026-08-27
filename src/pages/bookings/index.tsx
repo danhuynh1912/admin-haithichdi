@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/dialog';
 import { SimpleSelect } from '@/components/SimpleSelect';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn, formatDate, formatDateTime } from '@/lib/utils';
 
 interface Booking {
@@ -30,6 +31,7 @@ interface Booking {
     id: number;
     title: string;
     start_date: string | null;
+    end_date: string | null;
     location_id: number;
     locations: { id: number; name: string } | null;
   } | null;
@@ -40,11 +42,17 @@ interface LocationOption {
   name: string;
 }
 
-/** A tour that at least one booking points at — what the tour filter offers. */
+/** A tour that at least one booking points at — what the tour rail lists. */
 interface TourOption {
   id: number;
   title: string;
   start_date: string | null;
+  end_date: string | null;
+}
+
+interface TourWithCount extends TourOption {
+  /** How many bookings point at this tour, ignoring the status filter. */
+  count: number;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -59,10 +67,10 @@ const NEEDS_CONTACT = 'needs_contact_check';
 
 // `tours!inner` is what makes the `tours.location_id` filter narrow the
 // bookings themselves rather than just blanking out the embed.
-const SELECT_WITH_TOUR = '*, tours!inner(id, title, start_date, location_id, locations(id, name))';
+const SELECT_WITH_TOUR = '*, tours!inner(id, title, start_date, end_date, location_id, locations(id, name))';
 
 // Just enough of a booking to learn which tours are worth offering as filters.
-const SELECT_TOUR_ONLY = 'tour_id, tours!inner(id, title, start_date, location_id)';
+const SELECT_TOUR_ONLY = 'tour_id, tours!inner(id, title, start_date, end_date, location_id)';
 
 /** "No filter" as a real value — a blank one reads as nothing chosen. */
 const ALL = 'all';
@@ -73,9 +81,28 @@ const statusVariant = (s: string) =>
   : s === NEEDS_CONTACT ? 'info'
   : 'destructive';
 
-/** Titles repeat across departures, so the date is what tells them apart. */
-const tourLabel = (t: TourOption) =>
-  t.start_date ? `${t.title} — ${formatDate(t.start_date)}` : t.title;
+/**
+ * A departure as the days it runs: `26–27/08/2026` for the usual two-day trek,
+ * `30/08 – 01/09/2026` when it crosses a month, one plain date for a day trip.
+ * The shared month and year are written once — the pair of days is the part
+ * being read.
+ */
+function tourDates(start: string | null | undefined, end: string | null | undefined): string {
+  if (!start) return '—';
+  const from = new Date(start);
+  const to = end ? new Date(end) : from;
+  if (Number.isNaN(from.valueOf()) || Number.isNaN(to.valueOf())) return formatDate(start);
+  if (start === end || !end) return formatDate(start);
+
+  const sameYear = from.getFullYear() === to.getFullYear();
+  const sameMonth = sameYear && from.getMonth() === to.getMonth();
+  const day = (d: Date) => String(d.getDate()).padStart(2, '0');
+  const dayMonth = (d: Date) => `${day(d)}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+  if (sameMonth) return `${day(from)}–${formatDate(end)}`;
+  if (sameYear) return `${dayMonth(from)} – ${formatDate(end)}`;
+  return `${formatDate(start)} – ${formatDate(end)}`;
+}
 
 const col = createColumnHelper<Booking>();
 
@@ -109,9 +136,12 @@ export function BookingList() {
   });
 
   const tours = useMemo(() => {
-    const byId = new Map<number, TourOption>();
+    const byId = new Map<number, TourWithCount>();
     for (const row of bookedToursQuery?.data?.data ?? []) {
-      if (row.tours) byId.set(row.tours.id, row.tours);
+      if (!row.tours) continue;
+      const seen = byId.get(row.tours.id);
+      if (seen) seen.count += 1;
+      else byId.set(row.tours.id, { ...row.tours, count: 1 });
     }
     // Newest departures first: those are the ones still being worked on.
     return [...byId.values()].sort((a, b) => (b.start_date ?? '').localeCompare(a.start_date ?? ''));
@@ -140,6 +170,11 @@ export function BookingList() {
       id: 'location',
       header: 'Cung',
       cell: info => info.row.original.tours?.locations?.name ?? '—',
+    }),
+    col.display({
+      id: 'tour_dates',
+      header: 'Ngày đi',
+      cell: info => tourDates(info.row.original.tours?.start_date, info.row.original.tours?.end_date),
     }),
     col.accessor('status', {
       header: 'Trạng thái',
@@ -212,52 +247,52 @@ export function BookingList() {
   const resetPage = () => setCurrentPage(1);
 
   return (
-    <div className="p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-        <h2 className="text-xl font-bold">📋 Bookings</h2>
-        <div className="flex flex-wrap gap-2">
-          <SimpleSelect
-            ariaLabel="Lọc theo cung"
-            value={locationId}
-            onValueChange={next => {
-              setLocationId(next);
-              // The chosen tour likely belongs to the cung being left behind,
-              // which would leave the table showing nothing.
-              setTourId(ALL);
-              resetPage();
-            }}
-            options={[
-              { value: ALL, label: 'Tất cả cung' },
-              ...locations.map(l => ({ value: String(l.id), label: l.name })),
-            ]}
-          />
-          <SimpleSelect
-            ariaLabel="Lọc theo tour"
-            value={tourId}
-            onValueChange={next => { setTourId(next); resetPage(); }}
-            options={[
-              { value: ALL, label: 'Tất cả tour' },
-              ...tours.map(t => ({ value: String(t.id), label: tourLabel(t) })),
-            ]}
-          />
-          <SimpleSelect
-            ariaLabel="Lọc theo trạng thái"
-            value={status}
-            onValueChange={next => { setStatus(next); resetPage(); }}
-            options={[
-              { value: ALL, label: 'Tất cả trạng thái' },
-              ...Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label })),
-            ]}
-          />
+    <div className="flex min-h-full items-stretch">
+      <TourRail
+        tours={tours}
+        loading={bookedToursQuery?.isLoading ?? false}
+        selected={tourId}
+        onSelect={next => { setTourId(next); resetPage(); }}
+      />
+
+      <div className="min-w-0 flex-1 p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+          <h2 className="text-xl font-bold">📋 Bookings</h2>
+          <div className="flex flex-wrap gap-2">
+            <SimpleSelect
+              ariaLabel="Lọc theo cung"
+              value={locationId}
+              onValueChange={next => {
+                setLocationId(next);
+                // The chosen tour likely belongs to the cung being left behind,
+                // which would leave the table showing nothing.
+                setTourId(ALL);
+                resetPage();
+              }}
+              options={[
+                { value: ALL, label: 'Tất cả cung' },
+                ...locations.map(l => ({ value: String(l.id), label: l.name })),
+              ]}
+            />
+            <SimpleSelect
+              ariaLabel="Lọc theo trạng thái"
+              value={status}
+              onValueChange={next => { setStatus(next); resetPage(); }}
+              options={[
+                { value: ALL, label: 'Tất cả trạng thái' },
+                ...Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label })),
+              ]}
+            />
+          </div>
         </div>
-      </div>
 
-      <DataTable table={table} emptyText="Chưa có booking nào." />
+        <DataTable table={table} emptyText="Chưa có booking nào." />
 
-      <div className="flex gap-2 mt-4 items-center">
-        <Button variant="outline" size="sm" onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage <= 1}>←</Button>
-        <span className="text-sm text-muted-foreground">Trang {currentPage} / {pageCount}</span>
-        <Button variant="outline" size="sm" onClick={() => setCurrentPage(currentPage + 1)} disabled={currentPage >= pageCount}>→</Button>
+        <div className="flex gap-2 mt-4 items-center">
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage <= 1}>←</Button>
+          <span className="text-sm text-muted-foreground">Trang {currentPage} / {pageCount}</span>
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(currentPage + 1)} disabled={currentPage >= pageCount}>→</Button>
+        </div>
       </div>
 
       <Modal
@@ -269,6 +304,124 @@ export function BookingList() {
         {openBooking ? <BookingDetails booking={openBooking} /> : null}
       </Modal>
     </div>
+  );
+}
+
+/**
+ * The tours people have actually signed up for, as a column of their own.
+ *
+ * Same width as the app's nav so the two read as one rail down the left, and
+ * a departure is one click rather than a trip through a dropdown — the counts
+ * are the point as much as the filtering is: staff want to see, at a glance,
+ * which departure is filling up.
+ */
+function TourRail({
+  tours,
+  loading,
+  selected,
+  onSelect,
+}: {
+  tours: TourWithCount[];
+  loading: boolean;
+  selected: string;
+  onSelect: (value: string) => void;
+}) {
+  const total = tours.reduce((sum, t) => sum + t.count, 0);
+
+  return (
+    // Sticky rather than scrolling with the page: the list of departures is
+    // what the table is being read against, so it should stay put.
+    <aside className="sticky top-0 flex max-h-screen w-56 shrink-0 flex-col self-start overflow-y-auto border-r border-border p-3">
+      <p className="px-2 py-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+        Tour có khách đặt
+      </p>
+
+      {loading ? (
+        <div className="px-2 py-3"><Spinner /></div>
+      ) : (
+        <div className="flex flex-col gap-0.5">
+          <TourRailItem
+            label="Tất cả tour"
+            count={total}
+            active={selected === ALL}
+            onClick={() => onSelect(ALL)}
+          />
+          {tours.map(t => (
+            <TourRailItem
+              key={t.id}
+              label={t.title}
+              // The rail is narrow enough that longer titles are cut off, so
+              // hovering has to be able to give the whole name back.
+              tooltip={`${t.title} — ${tourDates(t.start_date, t.end_date)}`}
+              detail={tourDates(t.start_date, t.end_date)}
+              count={t.count}
+              active={selected === String(t.id)}
+              onClick={() => onSelect(String(t.id))}
+            />
+          ))}
+          {tours.length === 0 && (
+            <p className="px-2 py-2 text-sm text-muted-foreground">Chưa có tour nào có khách đặt.</p>
+          )}
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function TourRailItem({
+  label,
+  tooltip,
+  detail,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  tooltip?: string;
+  detail?: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <Tooltip disabled={!tooltip}>
+      <TooltipTrigger
+        type="button"
+        // Shorter than the 600ms default: the whole point is reading a name the
+        // rail cut off, and at that delay you have moved on before it appears.
+        delay={250}
+        onClick={onClick}
+        aria-pressed={active}
+        className={cn(
+          'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
+          'focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+          active
+            // Tonal, not the nav's solid fill: this picks a row *within* the
+            // screen and should not read as loudly as which screen you are on.
+            ? 'bg-primary/10 font-semibold text-primary'
+            : 'text-foreground/70 hover:bg-muted',
+        )}
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block truncate">{label}</span>
+          {detail && (
+            <span className={cn('block text-xs', active ? 'text-primary/70' : 'text-muted-foreground')}>
+              {detail}
+            </span>
+          )}
+        </span>
+        <span
+          className={cn(
+            'shrink-0 rounded-full px-1.5 py-0.5 text-xs tabular-nums',
+            active ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
+          )}
+        >
+          {count}
+        </span>
+      </TooltipTrigger>
+      {/* To the right, over the table: above would cover the neighbouring rows. */}
+      <TooltipContent side="right">{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 
