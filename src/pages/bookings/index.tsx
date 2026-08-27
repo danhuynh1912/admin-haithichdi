@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Download } from 'lucide-react';
 import { useTable } from '@refinedev/react-table';
-import { useList, useUpdate, type CrudFilter } from '@refinedev/core';
+import { useDataProvider, useList, useUpdate, type CrudFilter } from '@refinedev/core';
 import { createColumnHelper, getCoreRowModel } from '@tanstack/react-table';
 import { DataTable } from '@/components/DataTable';
 import { Badge, badgeVariants } from '@/components/ui/badge';
@@ -9,6 +10,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/dialog';
 import { SimpleSelect } from '@/components/SimpleSelect';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { slugify, writeBookingsXlsx, type ExportableBooking } from '@/lib/export-bookings';
 import { cn, formatDate, formatDateTime } from '@/lib/utils';
 
 interface Booking {
@@ -108,10 +110,13 @@ const col = createColumnHelper<Booking>();
 
 export function BookingList() {
   const { mutate: update } = useUpdate<Booking>();
+  const dataProvider = useDataProvider();
   const [locationId, setLocationId] = useState(ALL);
   const [tourId, setTourId] = useState(ALL);
   const [status, setStatus] = useState(ALL);
   const [openId, setOpenId] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const { query: locationsQuery } = useList<LocationOption>({
     resource: 'locations',
@@ -246,6 +251,71 @@ export function BookingList() {
   // Filtering can land the user past the end of the shorter result set.
   const resetPage = () => setCurrentPage(1);
 
+  /**
+   * Every booking the filters currently select, not just the page on screen —
+   * the table shows 30 at a time, and a file holding only those would be a
+   * quiet lie about what was exported. Fetched in batches because PostgREST
+   * caps a single response well below what a busy season holds.
+   */
+  const fetchFilteredBookings = async (): Promise<ExportableBooking[]> => {
+    const getList = dataProvider().getList;
+    const pageSize = 500;
+    const all: ExportableBooking[] = [];
+
+    for (let page = 1; ; page++) {
+      const { data, total } = await getList<Booking>({
+        resource: 'bookings',
+        filters,
+        sorters: [{ field: 'created_at', order: 'desc' }],
+        pagination: { currentPage: page, pageSize },
+        meta: { select: SELECT_WITH_TOUR },
+      });
+
+      all.push(...data);
+      if (data.length < pageSize || all.length >= (total ?? all.length)) break;
+    }
+
+    return all;
+  };
+
+  /** `bookings-phu-sa-phin-cho-xac-nhan-2026-08-27.xlsx` */
+  const exportFileName = () => {
+    const tour = tours.find(t => String(t.id) === tourId);
+    const parts = [
+      'bookings',
+      // The cung is already in the tour's own title, so naming both just makes
+      // the file name twice as long as it needs to be.
+      tour
+        ? `${tour.title} ${tourDates(tour.start_date, tour.end_date)}`
+        : locationId === ALL ? null : locations.find(l => String(l.id) === locationId)?.name,
+      status === ALL ? null : STATUS_LABEL[status],
+      new Date().toISOString().slice(0, 10),
+    ];
+    return `${parts.filter(Boolean).map(part => slugify(String(part))).join('-')}.xlsx`;
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const bookings = await fetchFilteredBookings();
+      if (bookings.length === 0) {
+        setExportError('Không có booking nào khớp bộ lọc hiện tại.');
+        return;
+      }
+      await writeBookingsXlsx({
+        bookings,
+        fileName: exportFileName(),
+        statusLabel: value => STATUS_LABEL[value] ?? value,
+        tourDates,
+      });
+    } catch (e) {
+      setExportError((e as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="flex min-h-full items-stretch">
       <TourRail
@@ -283,8 +353,16 @@ export function BookingList() {
                 ...Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label })),
               ]}
             />
+            <Button variant="outline" onClick={handleExport} disabled={exporting}>
+              {exporting ? <Spinner /> : <Download size={15} strokeWidth={1.75} />}
+              Xuất Excel
+            </Button>
           </div>
         </div>
+
+        {exportError && (
+          <p className="mb-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{exportError}</p>
+        )}
 
         <DataTable table={table} emptyText="Chưa có booking nào." />
 
