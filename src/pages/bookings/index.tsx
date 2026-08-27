@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTable } from '@refinedev/react-table';
 import { useList, useUpdate, type CrudFilter } from '@refinedev/core';
 import { createColumnHelper, getCoreRowModel } from '@tanstack/react-table';
@@ -29,6 +29,7 @@ interface Booking {
   tours: {
     id: number;
     title: string;
+    start_date: string | null;
     location_id: number;
     locations: { id: number; name: string } | null;
   } | null;
@@ -37,6 +38,13 @@ interface Booking {
 interface LocationOption {
   id: number;
   name: string;
+}
+
+/** A tour that at least one booking points at — what the tour filter offers. */
+interface TourOption {
+  id: number;
+  title: string;
+  start_date: string | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -51,7 +59,10 @@ const NEEDS_CONTACT = 'needs_contact_check';
 
 // `tours!inner` is what makes the `tours.location_id` filter narrow the
 // bookings themselves rather than just blanking out the embed.
-const SELECT_WITH_TOUR = '*, tours!inner(id, title, location_id, locations(id, name))';
+const SELECT_WITH_TOUR = '*, tours!inner(id, title, start_date, location_id, locations(id, name))';
+
+// Just enough of a booking to learn which tours are worth offering as filters.
+const SELECT_TOUR_ONLY = 'tour_id, tours!inner(id, title, start_date, location_id)';
 
 /** "No filter" as a real value — a blank one reads as nothing chosen. */
 const ALL = 'all';
@@ -62,11 +73,16 @@ const statusVariant = (s: string) =>
   : s === NEEDS_CONTACT ? 'info'
   : 'destructive';
 
+/** Titles repeat across departures, so the date is what tells them apart. */
+const tourLabel = (t: TourOption) =>
+  t.start_date ? `${t.title} — ${formatDate(t.start_date)}` : t.title;
+
 const col = createColumnHelper<Booking>();
 
 export function BookingList() {
   const { mutate: update } = useUpdate<Booking>();
   const [locationId, setLocationId] = useState(ALL);
+  const [tourId, setTourId] = useState(ALL);
   const [status, setStatus] = useState(ALL);
   const [openId, setOpenId] = useState<number | null>(null);
 
@@ -77,8 +93,33 @@ export function BookingList() {
   });
   const locations = locationsQuery?.data?.data ?? [];
 
+  // The tour list is drawn from the bookings themselves, not from `tours`:
+  // departures are generated in bulk months ahead, so a plain tour list would
+  // be hundreds of options where all but a few match nothing. Deliberately not
+  // narrowed by `status` — filtering by status must not make a tour disappear
+  // from the picker while it is the one selected.
+  const { query: bookedToursQuery } = useList<{ tour_id: number; tours: TourOption | null }>({
+    resource: 'bookings',
+    pagination: { pageSize: 1000 },
+    filters:
+      locationId === ALL
+        ? []
+        : [{ field: 'tours.location_id', operator: 'eq', value: Number(locationId) }],
+    meta: { select: SELECT_TOUR_ONLY },
+  });
+
+  const tours = useMemo(() => {
+    const byId = new Map<number, TourOption>();
+    for (const row of bookedToursQuery?.data?.data ?? []) {
+      if (row.tours) byId.set(row.tours.id, row.tours);
+    }
+    // Newest departures first: those are the ones still being worked on.
+    return [...byId.values()].sort((a, b) => (b.start_date ?? '').localeCompare(a.start_date ?? ''));
+  }, [bookedToursQuery?.data?.data]);
+
   const filters: CrudFilter[] = [];
   if (locationId !== ALL) filters.push({ field: 'tours.location_id', operator: 'eq', value: Number(locationId) });
+  if (tourId !== ALL) filters.push({ field: 'tour_id', operator: 'eq', value: Number(tourId) });
   if (status !== ALL) filters.push({ field: 'status', operator: 'eq', value: status });
 
   const columns = [
@@ -178,10 +219,25 @@ export function BookingList() {
           <SimpleSelect
             ariaLabel="Lọc theo cung"
             value={locationId}
-            onValueChange={next => { setLocationId(next); resetPage(); }}
+            onValueChange={next => {
+              setLocationId(next);
+              // The chosen tour likely belongs to the cung being left behind,
+              // which would leave the table showing nothing.
+              setTourId(ALL);
+              resetPage();
+            }}
             options={[
               { value: ALL, label: 'Tất cả cung' },
               ...locations.map(l => ({ value: String(l.id), label: l.name })),
+            ]}
+          />
+          <SimpleSelect
+            ariaLabel="Lọc theo tour"
+            value={tourId}
+            onValueChange={next => { setTourId(next); resetPage(); }}
+            options={[
+              { value: ALL, label: 'Tất cả tour' },
+              ...tours.map(t => ({ value: String(t.id), label: tourLabel(t) })),
             ]}
           />
           <SimpleSelect
