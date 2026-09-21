@@ -30,17 +30,26 @@ interface CampaignFormData {
   poster_alt: string; poster_alt_en: string;
 }
 
-interface TourRow {
+interface RouteRow {
   id: number;
-  title: string;
-  start_date: string | null;
-  end_date: string | null;
+  name: string;
+  default_trek_days: number | null;
+}
+
+/** One outing a campaign is raising through: a route and the days it runs. */
+interface CampaignDate {
+  location_id: number | '';
+  start_date: string;
+  end_date: string;
 }
 
 /** One figure counted up on the public page. */
 interface Stat { label: string; label_en: string; value: string }
 
 interface GalleryImage { image_path: string; caption: string; caption_en: string }
+
+const selectCls =
+  'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none';
 
 function Field({ label, error, hint, children }: {
   label: string; error?: string; hint?: string; children: React.ReactNode;
@@ -55,11 +64,13 @@ function Field({ label, error, hint, children }: {
   );
 }
 
-function tourLabel(tour: TourRow) {
-  const from = tour.start_date?.slice(5).split('-').reverse().join('/') ?? '';
-  const to = tour.end_date?.slice(5).split('-').reverse().join('/') ?? '';
-  const dates = from && to && from !== to ? `${from}–${to}` : from;
-  return dates ? `${tour.title} · ${dates}` : tour.title;
+/** `2026-09-19` + 2 days → `2026-09-20`, so the end date fills itself in. */
+function addDays(date: string, days: number): string {
+  const [y, m, d] = date.split('-').map(Number);
+  if (!y || !m || !d) return '';
+  const end = new Date(y, m - 1, d + days);
+  const pad = (v: number) => String(v).padStart(2, '0');
+  return `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`;
 }
 
 export function CampaignForm({ mode }: { mode: 'create' | 'edit' }) {
@@ -67,15 +78,13 @@ export function CampaignForm({ mode }: { mode: 'create' | 'edit' }) {
   const { saved, flash } = useSavedFlash();
   const { id } = useParams<{ id: string }>();
 
-  // Every tour, newest departure first: a campaign is usually being attached
-  // to trips that have just gone on sale.
-  const { query: toursQuery } = useList<TourRow>({
-    resource: 'tours',
-    pagination: { pageSize: 300 },
-    sorters: [{ field: 'start_date', order: 'desc' }],
-    meta: { select: 'id,title,start_date,end_date' },
+  const { query: routesQuery } = useList<RouteRow>({
+    resource: 'locations',
+    pagination: { pageSize: 100 },
+    sorters: [{ field: 'name', order: 'asc' }],
+    meta: { select: 'id,name,default_trek_days' },
   });
-  const tours = toursQuery?.data?.data ?? [];
+  const routes = routesQuery?.data?.data ?? [];
 
   const {
     register, handleSubmit, control, watch, setValue,
@@ -97,7 +106,7 @@ export function CampaignForm({ mode }: { mode: 'create' | 'edit' }) {
   const { field: resultVi } = useController({ control, name: 'result_md', defaultValue: '' });
   const { field: resultEn } = useController({ control, name: 'result_md_en', defaultValue: '' });
 
-  const [tourIds, setTourIds] = useState<number[]>([]);
+  const [dates, setDates] = useState<CampaignDate[]>([]);
   const [stats, setStats] = useState<Stat[]>([]);
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [loadingRelated, setLoadingRelated] = useState(mode === 'edit');
@@ -114,12 +123,17 @@ export function CampaignForm({ mode }: { mode: 'create' | 'edit' }) {
     if (mode !== 'edit' || !id) return;
     (async () => {
       const [{ data: linked }, { data: gallery }, { data: row }] = await Promise.all([
-        supabase.from('campaign_tours').select('tour_id').eq('campaign_id', id).order('sort_order'),
+        supabase.from('campaign_dates').select('location_id,start_date,end_date')
+          .eq('campaign_id', id).order('sort_order'),
         supabase.from('campaign_images').select('image_path,caption,caption_en')
           .eq('campaign_id', id).order('sort_order'),
         supabase.from('campaigns').select('result_stats').eq('id', id).single(),
       ]);
-      setTourIds((linked ?? []).map(r => r.tour_id as number));
+      setDates((linked ?? []).map(r => ({
+        location_id: r.location_id as number,
+        start_date: (r.start_date as string) ?? '',
+        end_date: (r.end_date as string) ?? '',
+      })));
       setImages((gallery ?? []) as GalleryImage[]);
       setStats(((row?.result_stats ?? []) as Stat[]).map(s => ({
         label: s.label ?? '', label_en: s.label_en ?? '', value: s.value ?? '',
@@ -137,8 +151,18 @@ export function CampaignForm({ mode }: { mode: 'create' | 'edit' }) {
     setValue('slug', slugifyTitle(title ?? ''));
   }, [title, mode, setValue]);
 
-  const toggleTour = (tourId: number) =>
-    setTourIds(prev => prev.includes(tourId) ? prev.filter(x => x !== tourId) : [...prev, tourId]);
+  const setDate = (index: number, patch: Partial<CampaignDate>) =>
+    setDates(prev => prev.map((d, i) => (i === index ? { ...d, ...patch } : d)));
+
+  /** Picking a route fills the end date in from how long it takes. */
+  const pickRoute = (index: number, locationId: number) => {
+    const days = routes.find(r => r.id === locationId)?.default_trek_days ?? 1;
+    const start = dates[index]?.start_date;
+    setDate(index, {
+      location_id: locationId,
+      end_date: start && days > 1 ? addDays(start, days - 1) : dates[index]?.end_date ?? '',
+    });
+  };
 
   async function onSubmit(raw: Record<string, unknown>) {
     const values = raw as unknown as CampaignFormData;
@@ -155,10 +179,18 @@ export function CampaignForm({ mode }: { mode: 'create' | 'edit' }) {
       const campaignId = (result?.data?.id ?? id) as number;
       if (!campaignId) return;
 
-      await supabase.from('campaign_tours').delete().eq('campaign_id', campaignId);
-      if (tourIds.length) {
-        await supabase.from('campaign_tours').insert(
-          tourIds.map((tour_id, sort_order) => ({ campaign_id: campaignId, tour_id, sort_order })),
+      await supabase.from('campaign_dates').delete().eq('campaign_id', campaignId);
+      // Half-filled rows are what a repeatable editor leaves behind.
+      const usable = dates.filter(d => d.location_id !== '' && d.start_date);
+      if (usable.length) {
+        await supabase.from('campaign_dates').insert(
+          usable.map((d, sort_order) => ({
+            campaign_id: campaignId,
+            location_id: d.location_id,
+            start_date: d.start_date,
+            end_date: d.end_date || null,
+            sort_order,
+          })),
         );
       }
 
@@ -289,26 +321,62 @@ export function CampaignForm({ mode }: { mode: 'create' | 'edit' }) {
 
               <hr className="border-border" />
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Các chuyến đi kèm
+                Các chuyến của chiến dịch
               </p>
               <p className="text-xs text-muted-foreground -mt-3">
-                Chiến dịch tự đóng khi chuyến cuối cùng đi xong. Không gắn chuyến nào thì dùng
-                công tắc “Đã kết thúc” ở trên.
+                Cung và ngày đi. Chọn cung xong thì ngày về tự tính theo số ngày của cung, sửa
+                lại được. Chiến dịch tự đóng khi chuyến cuối cùng đi xong; không có chuyến nào
+                thì dùng công tắc “Đã kết thúc” ở trên.
               </p>
-              <div className="max-h-64 overflow-y-auto rounded-md border border-border p-3 flex flex-col gap-1.5">
-                {tours.map(tour => (
-                  <label key={tour.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={tourIds.includes(tour.id)}
-                      onChange={() => toggleTour(tour.id)}
+              <div className="flex flex-col gap-2">
+                {dates.map((date, index) => (
+                  <div key={index} className="grid grid-cols-[1fr_10rem_10rem_auto] items-center gap-2">
+                    <select
+                      value={date.location_id}
+                      onChange={e => pickRoute(index, Number(e.target.value))}
+                      className={selectCls}
+                    >
+                      <option value="">— Chọn cung —</option>
+                      {routes.map(route => (
+                        <option key={route.id} value={route.id}>{route.name}</option>
+                      ))}
+                    </select>
+                    <Input
+                      type="date"
+                      value={date.start_date}
+                      onChange={e => {
+                        const start = e.target.value;
+                        const days = routes.find(r => r.id === date.location_id)?.default_trek_days ?? 1;
+                        setDate(index, {
+                          start_date: start,
+                          end_date: start && days > 1 ? addDays(start, days - 1) : date.end_date,
+                        });
+                      }}
                     />
-                    {tourLabel(tour)}
-                  </label>
+                    <Input
+                      type="date"
+                      value={date.end_date}
+                      onChange={e => setDate(index, { end_date: e.target.value })}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDates(dates.filter((_, i) => i !== index))}
+                    >
+                      Xoá
+                    </Button>
+                  </div>
                 ))}
-                {tours.length === 0 && (
-                  <span className="text-sm text-muted-foreground">Chưa có tour nào.</span>
-                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="self-start"
+                  onClick={() => setDates([...dates, { location_id: '', start_date: '', end_date: '' }])}
+                >
+                  + Thêm chuyến
+                </Button>
               </div>
 
               <hr className="border-border" />

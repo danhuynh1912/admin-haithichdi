@@ -10,7 +10,6 @@ import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/dialog';
 import { SimpleSelect } from '@/components/SimpleSelect';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { slugify, writeBookingsXlsx, type ExportableBooking } from '@/lib/export-bookings';
 import { cn, formatDate, formatDateTime } from '@/lib/utils';
 
@@ -25,18 +24,18 @@ interface Booking {
   medal_name: string | null;
   dob: string | null;
   citizen_id: string | null;
+  emergency_phone: string;
   note: string;
   created_at: string;
-  tour_id: number;
-  // Embedded by `SELECT_WITH_TOUR` below — a booking always has a tour, but
+  location_id: number;
+  /** The day the customer asked to set off. The route says how long it runs. */
+  trek_date: string;
+  // Embedded by `SELECT_WITH_ROUTE` below — a booking always has a route, but
   // PostgREST types the embed as nullable, so guard when reading it.
-  tours: {
+  locations: {
     id: number;
-    title: string;
-    start_date: string | null;
-    end_date: string | null;
-    location_id: number;
-    locations: { id: number; name: string } | null;
+    name: string;
+    default_trek_days: number | null;
   } | null;
 }
 
@@ -45,17 +44,14 @@ interface LocationOption {
   name: string;
 }
 
-/** A tour that at least one booking points at — what the tour rail lists. */
-interface TourOption {
-  id: number;
-  title: string;
-  start_date: string | null;
-  end_date: string | null;
-}
+/** A day in the calendar, and how many climbs are out on it. */
+type DayTally = Map<string, number>;
 
-interface TourWithCount extends TourOption {
-  /** How many bookings point at this tour, ignoring the status filter. */
-  count: number;
+/** Just enough of a booking to draw the calendar. */
+interface CalendarRow {
+  trek_date: string;
+  location_id: number;
+  locations: { default_trek_days: number | null } | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -70,12 +66,37 @@ const STATUS_ITEMS = Object.entries(STATUS_LABEL).map(([value, label]) => ({ val
 /** The one status that carries a note the customer is meant to act on. */
 const NEEDS_CONTACT = 'needs_contact_check';
 
-// `tours!inner` is what makes the `tours.location_id` filter narrow the
-// bookings themselves rather than just blanking out the embed.
-const SELECT_WITH_TOUR = '*, tours!inner(id, title, start_date, end_date, location_id, locations(id, name))';
+const SELECT_WITH_ROUTE = '*, locations!inner(id, name, default_trek_days)';
 
-// Just enough of a booking to learn which tours are worth offering as filters.
-const SELECT_TOUR_ONLY = 'tour_id, tours!inner(id, title, start_date, end_date, location_id)';
+/** Just the two columns the calendar counts by. */
+const SELECT_FOR_CALENDAR = 'trek_date, location_id, locations!inner(default_trek_days)';
+
+const WEEKDAYS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/** Local date → `YYYY-MM-DD`, the shape `trek_date` compares as. */
+const toISO = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+/**
+ * A month as a Monday-first grid, padded with nulls so every row is a full
+ * week — the blanks keep day numbers under their weekday header.
+ */
+function monthCells(year: number, month: number): (Date | null)[] {
+  const lead = (new Date(year, month, 1).getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: (Date | null)[] = Array.from({ length: lead }, () => null);
+  for (let day = 1; day <= daysInMonth; day++) cells.push(new Date(year, month, day));
+  while (cells.length % 7) cells.push(null);
+  return cells;
+}
+
+/** The last day a climb starting on `trekDate` is still out. */
+function trekEnd(trekDate: string, trekDays: number | null): string {
+  const [y, m, d] = trekDate.split('-').map(Number);
+  if (!y || !m || !d) return trekDate;
+  return toISO(new Date(y, m - 1, d + Math.max((trekDays ?? 1) - 1, 0)));
+}
 
 /** "No filter" as a real value — a blank one reads as nothing chosen. */
 const ALL = 'all';
@@ -87,26 +108,13 @@ const statusVariant = (s: string) =>
   : 'destructive';
 
 /**
- * A departure as the days it runs: `26–27/08/2026` for the usual two-day trek,
- * `30/08 – 01/09/2026` when it crosses a month, one plain date for a day trip.
- * The shared month and year are written once — the pair of days is the part
- * being read.
+ * The days a climb covers: `26/09 – 27/09` for a two-day route, one plain date
+ * for a day trip. Only the first day is stored — the route supplies the rest.
  */
-function tourDates(start: string | null | undefined, end: string | null | undefined): string {
-  if (!start) return '—';
-  const from = new Date(start);
-  const to = end ? new Date(end) : from;
-  if (Number.isNaN(from.valueOf()) || Number.isNaN(to.valueOf())) return formatDate(start);
-  if (start === end || !end) return formatDate(start);
-
-  const sameYear = from.getFullYear() === to.getFullYear();
-  const sameMonth = sameYear && from.getMonth() === to.getMonth();
-  const day = (d: Date) => String(d.getDate()).padStart(2, '0');
-  const dayMonth = (d: Date) => `${day(d)}/${String(d.getMonth() + 1).padStart(2, '0')}`;
-
-  if (sameMonth) return `${day(from)}–${formatDate(end)}`;
-  if (sameYear) return `${dayMonth(from)} – ${formatDate(end)}`;
-  return `${formatDate(start)} – ${formatDate(end)}`;
+function trekRange(trekDate: string, trekDays: number | null): string {
+  const start = formatDate(trekDate);
+  if (!trekDays || trekDays <= 1) return start;
+  return `${start} – ${formatDate(trekEnd(trekDate, trekDays))}`;
 }
 
 const col = createColumnHelper<Booking>();
@@ -115,11 +123,23 @@ export function BookingList() {
   const { mutate: update } = useUpdate<Booking>();
   const dataProvider = useDataProvider();
   const [locationId, setLocationId] = useState(ALL);
-  const [tourId, setTourId] = useState(ALL);
   const [status, setStatus] = useState(ALL);
   const [openId, setOpenId] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  const todayISO = toISO(new Date());
+  // The window is anchored to the first of a month and always spans three
+  // whole months; navigation slides it by three so pages never overlap.
+  const [anchor, setAnchor] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  /** No day picked = every registration, newest first. */
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+
+  const months = [0, 1, 2].map(i => new Date(anchor.getFullYear(), anchor.getMonth() + i, 1));
+  const windowEnd = toISO(new Date(anchor.getFullYear(), anchor.getMonth() + 3, 0));
 
   const { query: locationsQuery } = useList<LocationOption>({
     resource: 'locations',
@@ -128,37 +148,61 @@ export function BookingList() {
   });
   const locations = locationsQuery?.data?.data ?? [];
 
-  // The tour list is drawn from the bookings themselves, not from `tours`:
-  // departures are generated in bulk months ahead, so a plain tour list would
-  // be hundreds of options where all but a few match nothing. Deliberately not
-  // narrowed by `status` — filtering by status must not make a tour disappear
-  // from the picker while it is the one selected.
-  const { query: bookedToursQuery } = useList<{ tour_id: number; tours: TourOption | null }>({
+  /**
+   * Every climb that touches the three months on screen.
+   *
+   * Deliberately unfiltered by route: the calendar still draws the days other
+   * routes are out on, dimmed, so filtering never looks like the month emptied.
+   * A climb can start before the window and run into it, so the lower bound
+   * reaches back by the longest route anyone offers — a week is generous.
+   */
+  const { query: windowQuery } = useList<CalendarRow>({
     resource: 'bookings',
     pagination: { pageSize: 1000 },
-    filters:
-      locationId === ALL
-        ? []
-        : [{ field: 'tours.location_id', operator: 'eq', value: Number(locationId) }],
-    meta: { select: SELECT_TOUR_ONLY },
+    filters: [
+      { field: 'trek_date', operator: 'lte', value: windowEnd },
+      { field: 'trek_date', operator: 'gte', value: toISO(new Date(months[0].getFullYear(), months[0].getMonth(), -7)) },
+    ],
+    meta: { select: SELECT_FOR_CALENDAR },
   });
+  const windowRows = windowQuery?.data?.data ?? [];
+  const calendarLoading = windowQuery?.isLoading ?? false;
 
-  const tours = useMemo(() => {
-    const byId = new Map<number, TourWithCount>();
-    for (const row of bookedToursQuery?.data?.data ?? []) {
-      if (!row.tours) continue;
-      const seen = byId.get(row.tours.id);
-      if (seen) seen.count += 1;
-      else byId.set(row.tours.id, { ...row.tours, count: 1 });
+  /** Tally how many of `rows` are out on each day they cover, start through end. */
+  const tally = (rows: CalendarRow[]): DayTally => {
+    const map: DayTally = new Map();
+    for (const row of rows) {
+      const last = trekEnd(row.trek_date, row.locations?.default_trek_days ?? null);
+      const end = new Date(`${last}T00:00:00`);
+      for (const d = new Date(`${row.trek_date}T00:00:00`); d <= end; d.setDate(d.getDate() + 1)) {
+        const key = toISO(d);
+        map.set(key, (map.get(key) ?? 0) + 1);
+      }
     }
-    // Newest departures first: those are the ones still being worked on.
-    return [...byId.values()].sort((a, b) => (b.start_date ?? '').localeCompare(a.start_date ?? ''));
-  }, [bookedToursQuery?.data?.data]);
+    return map;
+  };
+
+  // Two tallies while a route is picked: its days stay lit and clickable,
+  // days belonging only to other routes stay visible but dimmed and inert.
+  const { countByDay, mutedByDay } = useMemo(() => {
+    if (locationId === ALL) {
+      return { countByDay: tally(windowRows), mutedByDay: new Map() as DayTally };
+    }
+    const picked = Number(locationId);
+    return {
+      countByDay: tally(windowRows.filter(r => r.location_id === picked)),
+      mutedByDay: tally(windowRows.filter(r => r.location_id !== picked)),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowRows, locationId]);
 
   const filters: CrudFilter[] = [];
-  if (locationId !== ALL) filters.push({ field: 'tours.location_id', operator: 'eq', value: Number(locationId) });
-  if (tourId !== ALL) filters.push({ field: 'tour_id', operator: 'eq', value: Number(tourId) });
+  if (locationId !== ALL) filters.push({ field: 'location_id', operator: 'eq', value: Number(locationId) });
   if (status !== ALL) filters.push({ field: 'status', operator: 'eq', value: status });
+  // A day narrows to the climbs setting off that day. Not the ones passing
+  // through it: staff work by departure, and "who leaves on the 26th" is the
+  // question the calendar is being asked.
+  if (selectedDay) filters.push({ field: 'trek_date', operator: 'eq', value: selectedDay });
 
   const columns = [
     col.accessor('full_name', {
@@ -177,12 +221,16 @@ export function BookingList() {
     col.display({
       id: 'location',
       header: 'Cung',
-      cell: info => info.row.original.tours?.locations?.name ?? '—',
+      cell: info => info.row.original.locations?.name ?? '—',
     }),
     col.display({
       id: 'tour_dates',
-      header: 'Ngày đi',
-      cell: info => tourDates(info.row.original.tours?.start_date, info.row.original.tours?.end_date),
+      header: 'Ngày leo',
+      cell: info =>
+        trekRange(
+          info.row.original.trek_date,
+          info.row.original.locations?.default_trek_days ?? null,
+        ),
     }),
     col.accessor('status', {
       header: 'Trạng thái',
@@ -212,7 +260,7 @@ export function BookingList() {
     columns,
     refineCoreProps: {
       resource: 'bookings',
-      meta: { select: SELECT_WITH_TOUR },
+      meta: { select: SELECT_WITH_ROUTE },
       filters: { permanent: filters },
       sorters: { initial: [{ field: 'created_at', order: 'desc' }] },
       pagination: { pageSize: 30 },
@@ -250,7 +298,7 @@ export function BookingList() {
         filters,
         sorters: [{ field: 'created_at', order: 'desc' }],
         pagination: { currentPage: page, pageSize },
-        meta: { select: SELECT_WITH_TOUR },
+        meta: { select: SELECT_WITH_ROUTE },
       });
 
       all.push(...data);
@@ -274,14 +322,10 @@ export function BookingList() {
 
   /** `bookings-phu-sa-phin-cho-xac-nhan-2026-08-27.xlsx` */
   const exportFileName = () => {
-    const tour = tours.find(t => String(t.id) === tourId);
     const parts = [
       'bookings',
-      // The cung is already in the tour's own title, so naming both just makes
-      // the file name twice as long as it needs to be.
-      tour
-        ? `${tour.title} ${tourDates(tour.start_date, tour.end_date)}`
-        : locationId === ALL ? null : locations.find(l => String(l.id) === locationId)?.name,
+      locationId === ALL ? null : locations.find(l => String(l.id) === locationId)?.name,
+      selectedDay,
       status === ALL ? null : STATUS_LABEL[status],
       new Date().toISOString().slice(0, 10),
     ];
@@ -301,7 +345,7 @@ export function BookingList() {
         bookings,
         fileName: exportFileName(),
         fallbackTitle: exportTitle(),
-        tourDates,
+        trekRange,
       });
     } catch (e) {
       setExportError((e as Error).message);
@@ -312,11 +356,21 @@ export function BookingList() {
 
   return (
     <div className="flex min-h-full items-stretch">
-      <TourRail
-        tours={tours}
-        loading={bookedToursQuery?.isLoading ?? false}
-        selected={tourId}
-        onSelect={next => { setTourId(next); resetPage(); }}
+      <BookingCalendar
+        months={months}
+        todayISO={todayISO}
+        countByDay={countByDay}
+        mutedByDay={mutedByDay}
+        selectedDay={selectedDay}
+        loading={calendarLoading}
+        onSelect={day => { setSelectedDay(day); resetPage(); }}
+        onShift={by => setAnchor(a => new Date(a.getFullYear(), a.getMonth() + by, 1))}
+        onToday={() => {
+          const now = new Date();
+          setAnchor(new Date(now.getFullYear(), now.getMonth(), 1));
+          setSelectedDay(toISO(now));
+          resetPage();
+        }}
       />
 
       <div className="min-w-0 flex-1 p-6">
@@ -326,13 +380,7 @@ export function BookingList() {
             <SimpleSelect
               ariaLabel="Lọc theo cung"
               value={locationId}
-              onValueChange={next => {
-                setLocationId(next);
-                // The chosen tour likely belongs to the cung being left behind,
-                // which would leave the table showing nothing.
-                setTourId(ALL);
-                resetPage();
-              }}
+              onValueChange={next => { setLocationId(next); resetPage(); }}
               options={[
                 { value: ALL, label: 'Tất cả cung' },
                 ...locations.map(l => ({ value: String(l.id), label: l.name })),
@@ -418,120 +466,109 @@ function StatusSelect({ value, onChange }: { value: string; onChange: (next: str
 }
 
 /**
- * The tours people have actually signed up for, as a column of their own.
+ * Three months of climbs, as the way into the list beside it.
  *
- * Same width as the app's nav so the two read as one rail down the left, and
- * a departure is one click rather than a trip through a dropdown — the counts
- * are the point as much as the filtering is: staff want to see, at a glance,
- * which departure is filling up.
+ * Staff work by departure day — "who is on the hill on the 26th" — which the
+ * old list of departures answered for them. With customers naming their own
+ * dates there is no such list, so the calendar builds one: a day is lit when
+ * somebody is out on it, and clicking it narrows the table to that departure.
+ *
+ * Same width as the app's nav so the two read as one rail down the left.
  */
-function TourRail({
-  tours,
+function BookingCalendar({
+  months,
+  todayISO,
+  countByDay,
+  mutedByDay,
+  selectedDay,
   loading,
-  selected,
   onSelect,
+  onShift,
+  onToday,
 }: {
-  tours: TourWithCount[];
+  months: Date[];
+  todayISO: string;
+  countByDay: DayTally;
+  mutedByDay: DayTally;
+  selectedDay: string | null;
   loading: boolean;
-  selected: string;
-  onSelect: (value: string) => void;
-}) {
-  const total = tours.reduce((sum, t) => sum + t.count, 0);
-
-  return (
-    // Sticky rather than scrolling with the page: the list of departures is
-    // what the table is being read against, so it should stay put.
-    <aside className="sticky top-0 flex max-h-screen w-56 shrink-0 flex-col self-start overflow-y-auto border-r border-border p-3">
-      <p className="px-2 py-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        Tour có khách đặt
-      </p>
-
-      {loading ? (
-        <div className="px-2 py-3"><Spinner /></div>
-      ) : (
-        <div className="flex flex-col gap-0.5">
-          <TourRailItem
-            label="Tất cả tour"
-            count={total}
-            active={selected === ALL}
-            onClick={() => onSelect(ALL)}
-          />
-          {tours.map(t => (
-            <TourRailItem
-              key={t.id}
-              label={t.title}
-              // The rail is narrow enough that longer titles are cut off, so
-              // hovering has to be able to give the whole name back.
-              tooltip={`${t.title} — ${tourDates(t.start_date, t.end_date)}`}
-              detail={tourDates(t.start_date, t.end_date)}
-              count={t.count}
-              active={selected === String(t.id)}
-              onClick={() => onSelect(String(t.id))}
-            />
-          ))}
-          {tours.length === 0 && (
-            <p className="px-2 py-2 text-sm text-muted-foreground">Chưa có tour nào có khách đặt.</p>
-          )}
-        </div>
-      )}
-    </aside>
-  );
-}
-
-function TourRailItem({
-  label,
-  tooltip,
-  detail,
-  count,
-  active,
-  onClick,
-}: {
-  label: string;
-  tooltip?: string;
-  detail?: string;
-  count: number;
-  active: boolean;
-  onClick: () => void;
+  onSelect: (day: string | null) => void;
+  onShift: (by: number) => void;
+  onToday: () => void;
 }) {
   return (
-    <Tooltip disabled={!tooltip}>
-      <TooltipTrigger
-        type="button"
-        // Shorter than the 600ms default: the whole point is reading a name the
-        // rail cut off, and at that delay you have moved on before it appears.
-        delay={250}
-        onClick={onClick}
-        aria-pressed={active}
-        className={cn(
-          'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
-          'focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-          active
-            // Tonal, not the nav's solid fill: this picks a row *within* the
-            // screen and should not read as loudly as which screen you are on.
-            ? 'bg-primary/10 font-semibold text-primary'
-            : 'text-foreground/70 hover:bg-muted',
+    // Sticky rather than scrolling with the page: the calendar is what the
+    // table is being read against, so it should stay put.
+    <aside className="sticky top-0 flex max-h-screen w-64 shrink-0 flex-col self-start overflow-y-auto border-r border-border p-3">
+      <div className="mb-3 flex items-center justify-between gap-1">
+        <Button variant="outline" size="sm" title="3 tháng trước" onClick={() => onShift(-3)}>←</Button>
+        <span className="text-xs font-semibold">
+          T{months[0].getMonth() + 1}/{months[0].getFullYear()} – T{months[2].getMonth() + 1}/{months[2].getFullYear()}
+          {loading && <Spinner className="ml-2 inline-block size-3" />}
+        </span>
+        <Button variant="outline" size="sm" title="3 tháng sau" onClick={() => onShift(3)}>→</Button>
+      </div>
+
+      <div className="mb-3 flex gap-2">
+        <Button variant="ghost" size="sm" className="flex-1" onClick={onToday}>Hôm nay</Button>
+        {selectedDay && (
+          <Button variant="ghost" size="sm" className="flex-1" onClick={() => onSelect(null)}>
+            Bỏ lọc ngày
+          </Button>
         )}
-      >
-        <span className="min-w-0 flex-1">
-          <span className="block truncate">{label}</span>
-          {detail && (
-            <span className={cn('block text-xs', active ? 'text-primary/70' : 'text-muted-foreground')}>
-              {detail}
-            </span>
-          )}
-        </span>
-        <span
-          className={cn(
-            'shrink-0 rounded-full px-1.5 py-0.5 text-xs tabular-nums',
-            active ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
-          )}
-        >
-          {count}
-        </span>
-      </TooltipTrigger>
-      {/* To the right, over the table: above would cover the neighbouring rows. */}
-      <TooltipContent side="right">{tooltip}</TooltipContent>
-    </Tooltip>
+      </div>
+
+      <div className="flex flex-col gap-4">
+        {months.map(m => (
+          <div key={toISO(m)} className="rounded-xl border border-border p-2">
+            <div className="mb-2 text-center text-sm font-semibold">
+              Tháng {m.getMonth() + 1}/{m.getFullYear()}
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {WEEKDAYS.map(w => (
+                <span key={w} className="py-1 text-center text-[10px] font-semibold uppercase text-muted-foreground">
+                  {w}
+                </span>
+              ))}
+              {monthCells(m.getFullYear(), m.getMonth()).map((d, i) => {
+                if (!d) return <span key={i} />;
+                const key = toISO(d);
+                const count = countByDay.get(key) ?? 0;
+                // Only reachable when the picked route has nobody out that day:
+                // a day belonging to other routes is shown, but leads nowhere.
+                const muted = count === 0 ? (mutedByDay.get(key) ?? 0) : 0;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    disabled={muted > 0}
+                    onClick={() => onSelect(selectedDay === key ? null : key)}
+                    title={
+                      count ? `${count} đăng ký` : muted ? `${muted} đăng ký của cung khác` : undefined
+                    }
+                    className={cn(
+                      'relative aspect-square rounded-md text-xs transition-colors',
+                      count > 0 && 'bg-primary/15 font-semibold text-primary hover:bg-primary/25',
+                      muted > 0 && 'cursor-not-allowed bg-muted/60 text-muted-foreground/60 saturate-0',
+                      count === 0 && muted === 0 && 'text-foreground/70 hover:bg-muted',
+                      selectedDay === key && 'ring-2 ring-primary',
+                      todayISO === key && selectedDay !== key && 'ring-1 ring-border',
+                    )}
+                  >
+                    {d.getDate()}
+                    {count > 1 && (
+                      <span className="absolute top-0.5 right-0.5 text-[9px] leading-none font-bold">
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </aside>
   );
 }
 
@@ -540,11 +577,12 @@ function BookingDetails({ booking }: { booking: Booking }) {
     ['Trạng thái', <Badge variant={statusVariant(booking.status)}>{STATUS_LABEL[booking.status]}</Badge>],
     ['Số điện thoại', booking.phone || '—'],
     ['Email', booking.email || '—'],
-    ['Cung', booking.tours?.locations?.name ?? '—'],
-    ['Tour', booking.tours?.title ?? `#${booking.tour_id}`],
+    ['Cung', booking.locations?.name ?? '—'],
+    ['Ngày leo', trekRange(booking.trek_date, booking.locations?.default_trek_days ?? null)],
     ['Tên HCV', booking.medal_name || '—'],
     ['Ngày sinh', formatDate(booking.dob)],
     ['CCCD/CMND', booking.citizen_id || '—'],
+    ['SĐT người thân', booking.emergency_phone || '—'],
     ['Ngày đặt', formatDateTime(booking.created_at)],
   ];
 

@@ -14,17 +14,14 @@ export interface ExportableBooking {
   dob: string | null;
   email: string;
   citizen_id: string | null;
+  emergency_phone: string;
   note: string;
   created_at: string;
-  tours: {
-    title: string;
-    start_date: string | null;
-    end_date: string | null;
-    locations: { name: string } | null;
-  } | null;
+  trek_date: string;
+  locations: { name: string; default_trek_days: number | null } | null;
 }
 
-type TourDates = (start: string | null | undefined, end: string | null | undefined) => string;
+type TrekRange = (trekDate: string, trekDays: number | null) => string;
 
 const HEADER = {
   fontWeight: 'bold',
@@ -46,6 +43,11 @@ function formColumns(): Column<ExportableBooking>[] {
     { header: { value: 'Ngày sinh', ...HEADER }, width: 13, cell: b => (b.dob ? formatDate(b.dob) : '') },
     { header: { value: 'Email', ...HEADER }, width: 26, cell: b => b.email },
     { header: { value: 'Căn cước công dân', ...HEADER }, width: 18, cell: b => ({ value: b.citizen_id ?? '', type: String }) },
+    {
+      header: { value: 'SĐT người thân', ...HEADER },
+      width: 18,
+      cell: b => ({ value: b.emergency_phone ?? '', type: String }),
+    },
     { header: { value: 'Ghi chú của khách', ...HEADER }, width: 40, cell: b => b.note },
   ];
 }
@@ -57,17 +59,23 @@ function formColumns(): Column<ExportableBooking>[] {
  * — "Tất cả tour" — cannot, and without these two columns its rows are people
  * from different treks with nothing to separate them.
  */
-function departureColumns(tourDates: TourDates): Column<ExportableBooking>[] {
+function departureColumns(trekRange: TrekRange): Column<ExportableBooking>[] {
   return [
-    { header: { value: 'Cung', ...HEADER }, width: 18, cell: b => b.tours?.locations?.name ?? '' },
-    { header: { value: 'Ngày đi', ...HEADER }, width: 18, cell: b => tourDates(b.tours?.start_date, b.tours?.end_date) },
+    { header: { value: 'Cung', ...HEADER }, width: 18, cell: b => b.locations?.name ?? '' },
+    {
+      header: { value: 'Ngày đi', ...HEADER },
+      width: 18,
+      cell: b => trekRange(b.trek_date, b.locations?.default_trek_days ?? null),
+    },
   ];
 }
 
 /** `Phu Sa Phìn — 19–20/09/2026`, or null when the rows span more than one. */
-function singleDeparture(bookings: ExportableBooking[], tourDates: TourDates): string | null {
+function singleDeparture(bookings: ExportableBooking[], trekRange: TrekRange): string | null {
   const seen = new Set(
-    bookings.map(b => `${b.tours?.locations?.name ?? ''}|${tourDates(b.tours?.start_date, b.tours?.end_date)}`),
+    bookings.map(
+      b => `${b.locations?.name ?? ''}|${trekRange(b.trek_date, b.locations?.default_trek_days ?? null)}`,
+    ),
   );
   if (seen.size !== 1) return null;
   const [name, dates] = [...seen][0].split('|');
@@ -89,20 +97,20 @@ export async function writeBookingsXlsx({
   bookings,
   fileName,
   fallbackTitle,
-  tourDates,
+  trekRange,
 }: {
   bookings: ExportableBooking[];
   fileName: string;
   /** Used when the rows span several departures — the filters describe it. */
   fallbackTitle: string;
-  tourDates: TourDates;
+  trekRange: TrekRange;
 }): Promise<void> {
   // Loaded on demand: the writer is far and away the heaviest thing on this
   // screen, and most visits to Bookings never export anything.
   const { default: writeXlsxFile, getSheetData } = await import('write-excel-file/browser');
 
-  const departure = singleDeparture(bookings, tourDates);
-  const columns = departure ? formColumns() : [...formColumns(), ...departureColumns(tourDates)];
+  const departure = singleDeparture(bookings, trekRange);
+  const columns = departure ? formColumns() : [...formColumns(), ...departureColumns(trekRange)];
 
   // The objects API writes a header and the rows; the title has to go above
   // both, so the sheet is built as raw rows from there on.

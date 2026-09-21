@@ -1,11 +1,13 @@
 import { useLogout } from '@refinedev/core';
 import { NavLink, Outlet } from 'react-router-dom';
-import { MapPin, Mountain, ClipboardList, Users, Newspaper, BotMessageSquare, HardDrive, HeartHandshake, LogOut } from 'lucide-react';
+import { MapPin, ClipboardList, Users, Newspaper, BotMessageSquare, HardDrive, HeartHandshake, LogOut } from 'lucide-react';
 import { useRole } from '@/components/RequireAdmin';
 
+// Tours is gone from here on purpose: departures are no longer published, and
+// the screen that managed them would only offer to edit rows nothing reads.
+// The routes under Locations are what a tour is now.
 const NAV = [
   { to: '/locations', label: 'Locations', icon: MapPin, adminOnly: true },
-  { to: '/tours', label: 'Tours', icon: Mountain, adminOnly: true },
   { to: '/bookings', label: 'Bookings', icon: ClipboardList, adminOnly: false },
   { to: '/blogs', label: 'Blog', icon: Newspaper, adminOnly: true },
   { to: '/campaigns', label: 'Thiện nguyện', icon: HeartHandshake, adminOnly: true },
